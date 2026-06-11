@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>批量打水印工具</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --primary: #1a73e8;
+    --primary-light: #e8f0fe;
+    --success: #34a853;
+    --success-light: #e6f4ea;
+    --warning: #fbbc04;
+    --warning-light: #fef7e0;
+    --danger: #ea4335;
+    --danger-light: #fce8e6;
+    --gray-50: #f8f9fa;
+    --gray-100: #f1f3f4;
+    --gray-200: #e8eaed;
+    --gray-300: #dadce0;
+    --gray-400: #bdc1c6;
+    --gray-500: #9aa0a6;
+    --gray-600: #80868b;
+    --gray-700: #5f6368;
+    --gray-800: #3c4043;
+    --gray-900: #202124;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.05);
+    --shadow-lg: 0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05);
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    color: var(--gray-900);
+    background: #f0f2f5;
+    min-height: 100vh;
+  }
+
+  /* ===== Header ===== */
+  .header {
+    background: white;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-sm);
+  }
+  .header-brand { display: flex; align-items: center; gap: 10px; }
+  .header-logo {
+    width: 32px; height: 32px;
+    background: var(--primary);
+    border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 16px; font-weight: 700;
+  }
+  .header-title { font-size: 16px; font-weight: 600; color: var(--gray-900); }
+  .header-sub { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
+  .header-actions { display: flex; gap: 8px; }
+
+  /* ===== Layout ===== */
+  .app { display: flex; height: calc(100vh - 56px); }
+  .sidebar {
+    width: 300px; min-width: 300px;
+    background: white;
+    border-right: 1px solid var(--gray-200);
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .main {
+    flex: 1; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .main-top {
+    background: white;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 16px 20px;
+    display: flex; align-items: center; gap: 12px;
+    flex-wrap: wrap;
+  }
+  .preview-area {
+    flex: 1; overflow-y: auto;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    align-content: start;
+  }
+  .preview-area.list-view {
+    grid-template-columns: 1fr;
+  }
+
+  /* ===== Sidebar Sections ===== */
+  .sidebar-section {
+    border-bottom: 1px solid var(--gray-100);
+    padding: 16px;
+  }
+  .sidebar-section:last-child { border-bottom: none; flex: 1; }
+  .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .section-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px; height: 12px;
+    background: var(--primary);
+    border-radius: 2px;
+  }
+
+  /* ===== Upload Zone ===== */
+  .upload-zone {
+    border: 1.5px dashed var(--gray-300);
+    border-radius: var(--radius);
+    padding: 20px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--gray-50);
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+  .upload-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .upload-icon { font-size: 24px; margin-bottom: 6px; }
+  .upload-text { font-size: 13px; font-weight: 500; color: var(--gray-700); }
+  .upload-hint { font-size: 11px; color: var(--gray-500); margin-top: 3px; }
+  .upload-status {
+    display: none; align-items: center; gap: 6px;
+    padding: 8px 10px;
+    background: var(--success-light);
+    border: 1px solid #a8d5b5;
+    border-radius: var(--radius);
+    margin-top: 8px;
+    font-size: 12px; color: #1e7e34;
+  }
+  .upload-status.show { display: flex; }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    flex-shrink: 0;
+  }
+
+  /* ===== Toggle Switch ===== */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 0;
+  }
+  .toggle-label { font-size: 13px; color: var(--gray-700); display: flex; align-items: center; gap: 6px; }
+  .toggle-label-icon { font-size: 14px; }
+  .toggle {
+    position: relative; width: 38px; height: 22px; flex-shrink: 0;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0;
+    background: var(--gray-300);
+    border-radius: 11px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 16px; height: 16px;
+    left: 3px; top: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle input:checked + .toggle-slider { background: var(--primary); }
+  .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
+
+  /* ===== Form Controls ===== */
+  .form-row { margin-bottom: 12px; }
+  .form-label {
+    display: block; font-size: 12px;
+    color: var(--gray-600); margin-bottom: 5px; font-weight: 500;
+  }
+  .form-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--gray-800);
+    background: white;
+    transition: border-color 0.15s;
+    outline: none;
+  }
+  .form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,115,232,0.15); }
+  .form-row-inline { display: flex; gap: 8px; }
+  .form-row-inline .form-row { flex: 1; margin-bottom: 0; }
+  .range-row { display: flex; align-items: center; gap: 10px; }
+  .range-row input[type="range"] { flex: 1; cursor: pointer; accent-color: var(--primary); }
+  .range-value {
+    min-width: 36px; text-align: center;
+    font-size: 12px; font-weight: 500; color: var(--gray-700);
+    background: var(--gray-100); border-radius: 4px; padding: 2px 6px;
+  }
+  .color-picker-row { display: flex; align-items: center; gap: 8px; }
+  .color-picker-row input[type="color"] {
+    width: 32px; height: 32px; border: 1px solid var(--gray-300);
+    border-radius: var(--radius); cursor: pointer; padding: 2px;
+  }
+  .color-preset-list { display: flex; gap: 4px; flex-wrap: wrap; }
+  .color-preset {
+    width: 22px; height: 22px;
+    border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.15s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .color-preset:hover, .color-preset.active { border-color: var(--gray-800); transform: scale(1.15); }
+
+  /* ===== Buttons ===== */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 0 16px; height: 36px;
+    border-radius: var(--radius);
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; border: none; transition: all 0.15s;
+    white-space: nowrap; text-decoration: none;
+  }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: #1557b0; }
+  .btn-success { background: var(--success); color: white; }
+  .btn-success:hover { background: #2d9248; }
+  .btn-outline {
+    background: white; color: var(--gray-700);
+    border: 1px solid var(--gray-300);
+  }
+  .btn-outline:hover { background: var(--gray-50); border-color: var(--gray-400); }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover { background: #c5382c; }
+  .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ===== Photo Grid ===== */
+  .photo-card {
+    background: white;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    border: 1.5px solid var(--gray-200);
+    transition: all 0.2s;
+    cursor: pointer;
+    position: relative;
+  }
+  .photo-card:hover { box-shadow: var(--shadow); border-color: var(--primary); transform: translateY(-1px); }
+  .photo-card.selected { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,115,232,0.2); }
+  .photo-thumb {
+    width: 100%; aspect-ratio: 4/3;
+    object-fit: cover; display: block;
+    background: var(--gray-100);
+  }
+  .photo-thumb-placeholder {
+    width: 100%; aspect-ratio: 4/3;
+    background: var(--gray-100);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--gray-400); font-size: 28px;
+  }
+  .photo-info { padding: 10px 12px 12px; }
+  .photo-name { font-size: 12px; font-weight: 500; color: var(--gray-800); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .photo-meta { font-size: 11px; color: var(--gray-500); line-height: 1.5; }
+  .photo-status-badge {
+    position: absolute; top: 8px; left: 8px;
+    padding: 2px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 600;
+    backdrop-filter: blur(4px);
+  }
+  .badge-matched { background: rgba(52,168,83,0.9); color: white; }
+  .badge-unmatched { background: rgba(234,67,53,0.85); color: white; }
+  .badge-done { background: rgba(26,115,232,0.9); color: white; }
+
+  .photo-delete-btn {
+    position: absolute; top: 6px; right: 6px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(0,0,0,0.5); color: white;
+    border: none; cursor: pointer;
+    font-size: 14px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.15s;
+    z-index: 2;
+  }
+  .photo-card:hover .photo-delete-btn { opacity: 1; }
+  .photo-delete-btn:hover { background: rgba(234,67,53,0.9); }
+
+  /* ===== Preview Modal ===== */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 90vw; max-height: 90vh;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    width: 800px;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--gray-200);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-title { font-size: 15px; font-weight: 600; }
+  .modal-close {
+    width: 28px; height: 28px;
+    border: none; background: var(--gray-100);
+    border-radius: 50%; cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--gray-600); transition: all 0.15s;
+  }
+  .modal-close:hover { background: var(--gray-200); }
+  .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+  .modal-footer { padding: 12px 20px; border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 8px; }
+
+  /* ===== Preview Canvas Wrapper ===== */
+  .canvas-wrapper {
+    display: flex; justify-content: center; align-items: flex-start;
+  }
+  #previewCanvas {
+    max-width: 100%; height: auto;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  /* ===== Progress ===== */
+  .progress-container {
+    display: none;
+    position: fixed; bottom: 24px; right: 24px;
+    background: white; border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--gray-200);
+    padding: 16px 20px; width: 300px; z-index: 500;
+  }
+  .progress-container.show { display: block; }
+  .progress-title { font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--gray-800); }
+  .progress-bar-wrap {
+    height: 6px; background: var(--gray-200);
+    border-radius: 3px; overflow: hidden; margin-bottom: 6px;
+  }
+  .progress-bar-fill {
+    height: 100%; background: var(--primary);
+    border-radius: 3px; transition: width 0.3s;
+    width: 0%;
+  }
+  .progress-text { font-size: 12px; color: var(--gray-500); }
+
+  /* ===== Empty State ===== */
+  .empty-state {
+    grid-column: 1 / -1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 60px 20px;
+    color: var(--gray-400);
+  }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; }
+  .empty-text { font-size: 14px; text-align: center; }
+  .empty-sub { font-size: 12px; margin-top: 6px; color: var(--gray-400); }
+
+  /* ===== Stats Bar ===== */
+  .stats-bar {
+    display: flex; gap: 4px; align-items: center;
+    font-size: 12px; color: var(--gray-600);
+    background: var(--gray-100); border-radius: var(--radius); padding: 4px 10px;
+  }
+  .stats-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .stats-dot.matched { background: var(--success); }
+  .stats-dot.unmatched { background: var(--danger); }
+  .stats-bar span { color: var(--gray-800); font-weight: 500; }
+
+  /* ===== Position Grid ===== */
+  .position-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 4px; margin-top: 8px;
+  }
+  .pos-btn {
+    height: 28px; border: 1px solid var(--gray-300);
+    border-radius: 4px; cursor: pointer; background: var(--gray-50);
+    font-size: 11px; color: var(--gray-600);
+    transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+  }
+  .pos-btn:hover { background: var(--primary-light); border-color: var(--primary); }
+  .pos-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+  /* ===== Tabs ===== */
+  .tab-bar { display: flex; border-bottom: 1px solid var(--gray-200); }
+  .tab-btn {
+    padding: 10px 16px; font-size: 13px; font-weight: 500;
+    color: var(--gray-500); border-bottom: 2px solid transparent;
+    cursor: pointer; transition: all 0.15s; background: none; border-top: none; border-left: none; border-right: none;
+  }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ===== Table for Excel data ===== */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .data-table th {
+    background: var(--gray-50); padding: 8px 10px;
+    text-align: left; border-bottom: 1px solid var(--gray-200);
+    font-weight: 500; color: var(--gray-600); white-space: nowrap;
+  }
+  .data-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--gray-100);
+    color: var(--gray-700);
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: var(--gray-50); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--gray-200); border-radius: var(--radius); }
+
+  /* ===== Notification ===== */
+  .toast {
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    background: var(--gray-900); color: white;
+    padding: 10px 20px; border-radius: 20px;
+    font-size: 13px; z-index: 9999;
+    opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ===== Scrollbar ===== */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--gray-400); }
+
+  .divider { height: 1px; background: var(--gray-100); margin: 8px 0; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-brand">
+    <div class="header-logo">W</div>
+    <div>
+      <div class="header-title">批量打水印工具</div>
+      <div class="header-sub">导入 Excel + 照片，一键批量生成水印</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline btn-sm" onclick="showHelp()">使用说明</button>
+    <button class="btn btn-outline btn-sm" onclick="downloadTemplate()">下载 Excel 模板</button>
+    <button id="btnConfirmExport" class="btn btn-success" onclick="showConfirmExport('all')" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      确认打水印
+    </button>
+    <button id="btnExportAll" class="btn btn-success" onclick="exportBatchAll()" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      导出全部 ZIP
+    </button>
+  </div>
+</header>
+
+<div class="app">
+  <!-- Sidebar: Settings -->
+  <aside class="sidebar">
+
+    <!-- Step 1: Excel Import -->
+    <div class="sidebar-section">
+      <div class="section-title">第一步 · 导入 Excel</div>
+      <div class="upload-zone" id="excelZone" ondragover="onDragOver(event,'excelZone')" ondragleave="onDragLeave('excelZone')" ondrop="onDropExcel(event)">
+        <input type="file" accept=".xlsx,.xls,.csv" onchange="onExcelChange(event)">
+        <div class="upload-icon">📊</div>
+        <div class="upload-text">点击或拖拽导入 Excel</div>
+        <div class="upload-hint">支持 .xlsx / .xls / .csv</div>
+      </div>
+      <div class="upload-status" id="excelStatus">
+        <div class="status-dot"></div>
+        <span id="excelStatusText">已加载 0 条记录</span>
+      </div>
+    </div>
+
+    <!-- Step 2: Photo Import -->
+    <div class="sidebar-section">
+      <div class="section-title">第二步 · 导入照片</div>
+      <div class="upload-zone" id="photoZone" ondragover="onDragOver(event,'photoZone')" ondragleave="onDragLeave('photoZone')" ondrop="onDropPhotos(event)">
+        <input type="file" accept="image/*" multiple onchange="onPhotoChange(event)">
+        <div class="upload-icon">🖼</div>
+        <div class="upload-text">点击或拖拽导入照片</div>
+        <div class="upload-hint">支持 JPG / PNG / WEBP，可多选</div>
+      </div>
+      <div class="upload-status" id="photoStatus">
+        <div class="status-dot"></div>
+        <span id="photoStatusText">已加载 0 张照片</span>
+      </div>
+    </div>
+
+    <!-- Step 3: Data Watermark Content -->
+    <div class="sidebar-section">
+      <div class="section-title">第三步 · 数据水印</div>
+      <div class="toggle-row">
+        <span class="toggle-label"><span class="toggle-label-icon">📅</span>日期</span>
+        <label class="toggle"><input type="checkbox" id="toggleDate" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label"><span class="toggle-label-icon">🕐</span>时间</span>
+        <label class="toggle"><input type="checkbox" id="toggleTime" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label"><span class="toggle-label-icon">📆</span>星期（自动识别）</span>
+        <label class="toggle"><input type="checkbox" id="toggleWeekday" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label"><span class="toggle-label-icon">📍</span>地点</span>
+        <label class="toggle"><input type="checkbox" id="toggleLocation" checked onchange="onToggleLocation()"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-row" id="locationIconRow" style="padding-left:20px;">
+        <span class="toggle-label" style="color:var(--gray-500); font-size:12px;">显示 📍 图标</span>
+        <label class="toggle"><input type="checkbox" id="toggleLocationIcon" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label"><span class="toggle-label-icon">🆔</span>编号</span>
+        <label class="toggle"><input type="checkbox" id="toggleId"><span class="toggle-slider"></span></label>
+      </div>
+    </div>
+
+    <!-- Step 4: Data Watermark Style -->
+    <div class="sidebar-section">
+      <div class="section-title">第四步 · 数据水印样式</div>
+
+      <div class="form-row">
+        <label class="form-label">字体大小</label>
+        <div class="range-row">
+          <input type="range" min="10" max="80" value="22" id="fontSize" oninput="updateRangeVal('fontSize','fontSizeVal')">
+          <span class="range-value" id="fontSizeVal">22</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">水印颜色</label>
+        <div class="color-picker-row">
+          <input type="color" id="colorPicker" value="#ffffff">
+          <div class="color-preset-list" id="colorPresets">
+            <div class="color-preset active" style="background:#ffffff" data-color="#ffffff" onclick="pickColor('#ffffff',this)"></div>
+            <div class="color-preset" style="background:#000000" data-color="#000000" onclick="pickColor('#000000',this)"></div>
+            <div class="color-preset" style="background:#ffdd00" data-color="#ffdd00" onclick="pickColor('#ffdd00',this)"></div>
+            <div class="color-preset" style="background:#ff4444" data-color="#ff4444" onclick="pickColor('#ff4444',this)"></div>
+            <div class="color-preset" style="background:#44bbff" data-color="#44bbff" onclick="pickColor('#44bbff',this)"></div>
+            <div class="color-preset" style="background:#44ff88" data-color="#44ff88" onclick="pickColor('#44ff88',this)"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">文字透明度</label>
+        <div class="range-row">
+          <input type="range" min="10" max="100" value="90" id="opacity" oninput="updateRangeVal('opacity','opacityVal')">
+          <span class="range-value" id="opacityVal">90</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">背景底色透明度（0=无底色）</label>
+        <div class="range-row">
+          <input type="range" min="0" max="80" value="40" id="bgOpacity" oninput="updateRangeVal('bgOpacity','bgOpacityVal')">
+          <span class="range-value" id="bgOpacityVal">40</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">内边距</label>
+        <div class="range-row">
+          <input type="range" min="4" max="40" value="14" id="padding" oninput="updateRangeVal('padding','paddingVal')">
+          <span class="range-value" id="paddingVal">14</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">圆角</label>
+        <div class="range-row">
+          <input type="range" min="0" max="30" value="6" id="borderRadius" oninput="updateRangeVal('borderRadius','borderRadiusVal')">
+          <span class="range-value" id="borderRadiusVal">6</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">水印框最大宽度（占图片宽度 %，自动换行）</label>
+        <div class="range-row">
+          <input type="range" min="10" max="100" value="50" id="maxWidth" oninput="updateRangeVal('maxWidth','maxWidthVal')">
+          <span class="range-value" id="maxWidthVal">50</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">水印位置</label>
+        <div class="position-grid" id="positionGrid">
+          <div class="pos-btn" data-pos="top-left" onclick="setPosition('top-left')">左上</div>
+          <div class="pos-btn" data-pos="top-center" onclick="setPosition('top-center')">上中</div>
+          <div class="pos-btn" data-pos="top-right" onclick="setPosition('top-right')">右上</div>
+          <div class="pos-btn" data-pos="mid-left" onclick="setPosition('mid-left')">左中</div>
+          <div class="pos-btn" data-pos="mid-center" onclick="setPosition('mid-center')">正中</div>
+          <div class="pos-btn" data-pos="mid-right" onclick="setPosition('mid-right')">右中</div>
+          <div class="pos-btn active" data-pos="bottom-left" onclick="setPosition('bottom-left')">左下</div>
+          <div class="pos-btn" data-pos="bottom-center" onclick="setPosition('bottom-center')">下中</div>
+          <div class="pos-btn" data-pos="bottom-right" onclick="setPosition('bottom-right')">右下</div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">输出质量（JPG，1-100）</label>
+        <div class="range-row">
+          <input type="range" min="50" max="100" value="92" id="quality" oninput="updateRangeVal('quality','qualityVal')">
+          <span class="range-value" id="qualityVal">92</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: Custom Text Watermark -->
+    <div class="sidebar-section">
+      <div class="section-title">第五步 · 自定义水印</div>
+
+      <div class="toggle-row">
+        <span class="toggle-label"><span class="toggle-label-icon">📝</span>启用自定义水印</span>
+        <label class="toggle"><input type="checkbox" id="toggleCustom"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="form-row" style="margin-top:10px;">
+        <input class="form-input" type="text" id="customText" placeholder="输入自定义水印文字">
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">字体大小</label>
+        <div class="range-row">
+          <input type="range" min="10" max="80" value="28" id="customFontSize" oninput="updateRangeVal('customFontSize','customFontSizeVal')">
+          <span class="range-value" id="customFontSizeVal">28</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">水印颜色</label>
+        <div class="color-picker-row">
+          <input type="color" id="customColorPicker" value="#ffdd00">
+          <div class="color-preset-list" id="customColorPresets">
+            <div class="color-preset" style="background:#ffdd00" data-color="#ffdd00" onclick="pickColor('#ffdd00',this,'custom')"></div>
+            <div class="color-preset active" style="background:#ffffff" data-color="#ffffff" onclick="pickColor('#ffffff',this,'custom')"></div>
+            <div class="color-preset" style="background:#000000" data-color="#000000" onclick="pickColor('#000000',this,'custom')"></div>
+            <div class="color-preset" style="background:#ff4444" data-color="#ff4444" onclick="pickColor('#ff4444',this,'custom')"></div>
+            <div class="color-preset" style="background:#44bbff" data-color="#44bbff" onclick="pickColor('#44bbff',this,'custom')"></div>
+            <div class="color-preset" style="background:#44ff88" data-color="#44ff88" onclick="pickColor('#44ff88',this,'custom')"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">文字透明度</label>
+        <div class="range-row">
+          <input type="range" min="10" max="100" value="85" id="customOpacity" oninput="updateRangeVal('customOpacity','customOpacityVal')">
+          <span class="range-value" id="customOpacityVal">85</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">背景底色透明度（0=无底色）</label>
+        <div class="range-row">
+          <input type="range" min="0" max="80" value="30" id="customBgOpacity" oninput="updateRangeVal('customBgOpacity','customBgOpacityVal')">
+          <span class="range-value" id="customBgOpacityVal">30</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">内边距</label>
+        <div class="range-row">
+          <input type="range" min="4" max="40" value="12" id="customPadding" oninput="updateRangeVal('customPadding','customPaddingVal')">
+          <span class="range-value" id="customPaddingVal">12</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">圆角</label>
+        <div class="range-row">
+          <input type="range" min="0" max="30" value="6" id="customBorderRadius" oninput="updateRangeVal('customBorderRadius','customBorderRadiusVal')">
+          <span class="range-value" id="customBorderRadiusVal">6</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">水印框最大宽度（占图片宽度 %，自动换行）</label>
+        <div class="range-row">
+          <input type="range" min="10" max="100" value="40" id="customMaxWidth" oninput="updateRangeVal('customMaxWidth','customMaxWidthVal')">
+          <span class="range-value" id="customMaxWidthVal">40</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">水印位置</label>
+        <div class="position-grid" id="customPositionGrid">
+          <div class="pos-btn" data-pos="top-left" onclick="setCustomPosition('top-left')">左上</div>
+          <div class="pos-btn" data-pos="top-center" onclick="setCustomPosition('top-center')">上中</div>
+          <div class="pos-btn active" data-pos="top-right" onclick="setCustomPosition('top-right')">右上</div>
+          <div class="pos-btn" data-pos="mid-left" onclick="setCustomPosition('mid-left')">左中</div>
+          <div class="pos-btn" data-pos="mid-center" onclick="setCustomPosition('mid-center')">正中</div>
+          <div class="pos-btn" data-pos="mid-right" onclick="setCustomPosition('mid-right')">右中</div>
+          <div class="pos-btn" data-pos="bottom-left" onclick="setCustomPosition('bottom-left')">左下</div>
+          <div class="pos-btn" data-pos="bottom-center" onclick="setCustomPosition('bottom-center')">下中</div>
+          <div class="pos-btn" data-pos="bottom-right" onclick="setCustomPosition('bottom-right')">右下</div>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main">
+    <!-- Top Bar -->
+    <div class="main-top">
+      <div style="flex:1; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <strong style="font-size:14px;">照片预览</strong>
+        <div class="stats-bar" id="statsBar" style="display:none;">
+          <div class="stats-dot matched"></div> 已匹配 <span id="statMatched">0</span>
+          <div class="stats-dot unmatched" style="margin-left:6px;"></div> 未匹配 <span id="statUnmatched">0</span>
+          <div style="margin-left:6px; color:var(--gray-400)">|</div> 共 <span id="statTotal">0</span> 张
+          <span id="statExcelInfo" style="margin-left:6px; font-size:12px; display:none;"></span>
+          <span id="statMismatchWarn" style="margin-left:6px; font-size:12px; color:var(--danger); display:none;"></span>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="toggleView()">
+        <svg id="viewIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        切换视图
+      </button>
+      <button class="btn btn-outline btn-sm" onclick="clearPhotos()">清空照片</button>
+      <button id="btnPreviewSelected" class="btn btn-primary btn-sm" onclick="previewSelected()" disabled>
+        单张预览
+      </button>
+      <button id="btnBatchPreview" class="btn btn-primary btn-sm" onclick="batchPreview('selected')" disabled>
+        批量预览
+      </button>
+      <button id="btnExportSelected" class="btn btn-outline btn-sm" onclick="handleExportSelected()" disabled>
+        导出选中
+      </button>
+    </div>
+
+    <!-- Photo Grid -->
+    <div class="preview-area" id="previewArea">
+      <div class="empty-state">
+        <div class="empty-icon">📷</div>
+        <div class="empty-text">暂无照片</div>
+        <div class="empty-sub">请先导入 Excel 明细表，再导入对应照片</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Preview Modal -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal" style="width:860px;">
+    <div class="modal-header">
+      <div class="modal-title" id="previewModalTitle">水印预览</div>
+      <button class="modal-close" onclick="closePreviewModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('preview')">预览效果</button>
+        <button class="tab-btn" onclick="switchTab('data')">Excel 数据</button>
+      </div>
+      <div class="tab-content active" id="tabPreview">
+        <div style="margin-top:16px;" class="canvas-wrapper">
+          <canvas id="previewCanvas"></canvas>
+        </div>
+      </div>
+      <div class="tab-content" id="tabData">
+        <div style="margin-top:16px;" id="excelDataTable">
+          <div style="color:var(--gray-500); font-size:13px; padding:20px; text-align:center;">
+            尚未导入 Excel 数据
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closePreviewModal()">关闭</button>
+      <button class="btn btn-primary" id="btnDownloadSingle" onclick="downloadSingle()">下载此图</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help Modal -->
+<div class="modal-overlay" id="helpModal">
+  <div class="modal" style="width:560px;">
+    <div class="modal-header">
+      <div class="modal-title">使用说明</div>
+      <button class="modal-close" onclick="closeHelp()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="line-height:1.9; font-size:13px; color:var(--gray-700);">
+        <p style="font-weight:500; color:var(--gray-900); margin-bottom:10px; font-size:14px;">操作步骤</p>
+        <ol style="padding-left:18px; display:flex; flex-direction:column; gap:10px;">
+          <li><strong>下载 Excel 模板</strong>：点击右上角「下载 Excel 模板」，按照模板格式填写照片编号、日期、时间、地点等信息。</li>
+          <li><strong>导入 Excel</strong>：将填好的 Excel 文件拖入或点击导入。</li>
+          <li><strong>导入照片</strong>：将照片文件（文件名需包含 Excel 中的编号）批量导入。</li>
+          <li><strong>配置水印</strong>：在左侧面板选择需要显示的水印项目、调整字体大小、颜色、位置等。</li>
+          <li><strong>预览</strong>：点击单张照片可预览水印效果，也可多选后批量预览。</li>
+          <li><strong>导出</strong>：点击「导出全部 ZIP」打包下载所有加水印图片。</li>
+        </ol>
+        <div class="divider" style="margin:16px 0;"></div>
+        <p style="font-weight:500; color:var(--gray-900); margin-bottom:8px;">Excel 格式说明</p>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>列名</th><th>说明</th><th>示例</th></tr></thead>
+            <tbody>
+              <tr><td>编号</td><td>与照片文件名对应（可模糊匹配）</td><td>IMG001</td></tr>
+              <tr><td>日期</td><td>格式 YYYY-MM-DD 或 YYYY/MM/DD</td><td>2024-03-15</td></tr>
+              <tr><td>时间</td><td>格式 HH:MM 或 HH:MM:SS</td><td>14:30</td></tr>
+              <tr><td>地点</td><td>地点描述</td><td>北京市朝阳区</td></tr>
+              <tr><td>备注</td><td>可选，作为自定义文本使用</td><td>工地现场</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="divider" style="margin:16px 0;"></div>
+        <p style="font-size:12px; color:var(--gray-500);">💡 提示：照片文件名只需包含 Excel 编号列中的内容即可自动匹配，如编号为 IMG001，则文件名 IMG001.jpg、2024_IMG001_test.jpg 均可匹配。</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeHelp()">知道了</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Export Modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal" style="width:480px;">
+    <div class="modal-header">
+      <div class="modal-title">确认打水印</div>
+      <button class="modal-close" onclick="closeConfirmModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="line-height:1.8; font-size:13px; color:var(--gray-700);">
+        <p style="margin-bottom:12px;">即将为以下照片批量添加水印：</p>
+        <div style="background:var(--gray-50); border-radius:var(--radius); padding:12px 16px; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span>照片数量</span><strong id="confirmCount">0</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span>已匹配 Excel 数据</span><strong id="confirmMatched">0</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span>未匹配（仅显示设置内容）</span><strong id="confirmUnmatched" style="color:var(--danger)">0</strong>
+          </div>
+        </div>
+        <div style="background:#FEF9E7; border:1px solid #F9E79F; border-radius:var(--radius); padding:10px 14px; font-size:12px; color:#7D6608;">
+          💡 水印应用后可在预览区查看效果，满意后点击「导出全部 ZIP」下载。
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeConfirmModal()">返回调整</button>
+      <button class="btn btn-primary" id="btnConfirmGo" onclick="doConfirmExport()">确认打水印</button>
+    </div>
+  </div>
+</div>
+
+<!-- Batch Preview Modal -->
+<div class="modal-overlay" id="batchPreviewModal">
+  <div class="modal" style="width:90vw; max-width:1000px;">
+    <div class="modal-header">
+      <div class="modal-title" id="batchPreviewTitle">批量水印预览</div>
+      <button class="modal-close" onclick="closeBatchPreviewModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom:12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <span style="font-size:13px; color:var(--gray-600);">共 <strong id="batchCount">0</strong> 张</span>
+        <label style="font-size:12px; color:var(--gray-500); display:flex; align-items:center; gap:4px; cursor:pointer;">
+          <input type="checkbox" id="batchShowAll" checked onchange="renderBatchPreview()"> 全部显示
+        </label>
+        <span style="font-size:11px; color:var(--gray-400);">（取消全选可逐个对比）</span>
+      </div>
+      <div id="batchPreviewGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeBatchPreviewModal()">关闭</button>
+      <button class="btn btn-success" id="btnConfirmFromPreview" onclick="closeBatchPreviewModal(); showConfirmExport(batchPreviewMode)">确认打水印</button>
+    </div>
+  </div>
+</div>
+
+<!-- Progress -->
+<div class="progress-container" id="progressContainer">
+  <div class="progress-title" id="progressTitle">正在处理...</div>
+  <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill"></div></div>
+  <div class="progress-text" id="progressText">0 / 0</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+//  State
+// ============================================================
+let excelData = [];      // [{id, date, time, location, remark, ...rawRow}]
+let photos = [];         // [{file, name, id(matched), matched:bool, url, excelRow}]
+let selectedPos = 'bottom-left';
+let customSelectedPos = 'top-right';  // 自定义水印默认右上角
+let previewPhotoIndex = -1;
+let isListView = false;
+let batchPreviewMode = 'selected';  // 'selected' | 'all'
+let confirmExportMode = 'selected'; // 'selected' | 'all'
+let batchPreviewPhotos = [];
+
+// ============================================================
+//  Utils
+// ============================================================
+const $id = id => document.getElementById(id);
+const WEEKDAYS = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+
+function showToast(msg, duration = 2500) {
+  const t = $id('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function updateRangeVal(rangeId, valId) {
+  $id(valId).textContent = $id(rangeId).value;
+}
+
+function getWeekday(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr.replace(/\//g, '-'));
+  if (isNaN(d)) return '';
+  return WEEKDAYS[d.getDay()];
+}
+
+function formatDate(raw) {
+  if (!raw) return '';
+  if (typeof raw === 'number') {
+    // Excel serial date
+    const d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+    return d.toISOString().split('T')[0];
+  }
+  return String(raw).replace(/\//g, '-').trim();
+}
+
+function formatTime(raw) {
+  if (!raw) return '';
+  if (typeof raw === 'number') {
+    const totalSec = Math.round(raw * 86400);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+  return String(raw).trim();
+}
+
+// ============================================================
+//  Drag & Drop
+// ============================================================
+function onDragOver(e, zoneId) {
+  e.preventDefault();
+  $id(zoneId).classList.add('drag-over');
+}
+function onDragLeave(zoneId) {
+  $id(zoneId).classList.remove('drag-over');
+}
+function onDropExcel(e) {
+  e.preventDefault();
+  $id('excelZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processExcel(file);
+}
+function onDropPhotos(e) {
+  e.preventDefault();
+  $id('photoZone').classList.remove('drag-over');
+  processPhotos(e.dataTransfer.files);
+}
+function onExcelChange(e) { if (e.target.files[0]) processExcel(e.target.files[0]); }
+function onPhotoChange(e) { if (e.target.files.length) processPhotos(e.target.files); }
+
+// ============================================================
+//  Excel Processing
+// ============================================================
+function processExcel(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if (!rows.length) { showToast('Excel 中没有数据，请检查文件'); return; }
+
+      // Normalize column names
+      excelData = rows.map(row => {
+        const keys = Object.keys(row);
+        const find = (candidates) => {
+          for (const c of candidates) {
+            const k = keys.find(k => k.trim().toLowerCase().includes(c));
+            if (k) return row[k];
+          }
+          return '';
+        };
+        const id = find(['编号','id','no','number','序号','编号']);
+        const date = formatDate(find(['日期','date']));
+        const time = formatTime(find(['时间','time']));
+        const location = find(['地点','位置','地址','location','address','place']);
+        const remark = find(['备注','remark','note','自定义','说明']);
+        return { id: String(id).trim(), date, time, location, remark, _raw: row };
+      });
+
+      $id('excelStatus').classList.add('show');
+      $id('excelStatusText').textContent = `已加载 ${excelData.length} 条记录`;
+      showToast(`Excel 导入成功：${excelData.length} 条记录`);
+      renderExcelTable();
+      // Re-match if photos already loaded
+      if (photos.length) matchPhotos();
+    } catch(err) {
+      showToast('Excel 解析失败：' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ============================================================
+//  Photo Processing
+// ============================================================
+function processPhotos(fileList) {
+  const newPhotos = [];
+  Array.from(fileList).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const url = URL.createObjectURL(file);
+    const baseName = file.name.replace(/\.[^.]+$/, '');
+    newPhotos.push({ file, name: file.name, baseName, url, matched: false, excelRow: null, done: false });
+  });
+  photos = [...photos, ...newPhotos];
+  $id('photoStatus').classList.add('show');
+  $id('photoStatusText').textContent = `已加载 ${photos.length} 张照片`;
+  $id('btnConfirmExport').disabled = photos.length === 0;
+  // Reset to confirm state when new photos added
+  $id('btnConfirmExport').style.display = '';
+  $id('btnExportAll').style.display = 'none';
+  matchPhotos();
+  renderPhotoGrid();
+}
+
+function matchPhotos() {
+  if (!excelData.length) return;
+  const excelIds = excelData.filter(r => r.id).map(r => r.id.trim());
+  const matchedExcelSet = new Set();
+  let matchedCount = 0;
+
+  photos.forEach(p => {
+    const photoId = p.baseName.trim();
+    const row = excelData.find(r => r.id && r.id.trim() === photoId);
+    if (row) {
+      p.matched = true;
+      p.excelRow = row;
+      matchedExcelSet.add(row.id.trim());
+      matchedCount++;
+    } else {
+      p.matched = false;
+      p.excelRow = null;
+    }
+  });
+
+  const extraPhotos = photos.length - matchedCount;
+  const missingExcel = excelIds.filter(id => !matchedExcelSet.has(id));
+
+  updateStats();
+
+  // 更新照片状态文案，显示匹配异常
+  let text = `已加载 ${photos.length} 张照片`;
+  if (extraPhotos > 0 || missingExcel.length > 0) {
+    const parts = [];
+    if (extraPhotos > 0) parts.push(`${extraPhotos} 张无法匹配`);
+    if (missingExcel.length > 0) parts.push(`${missingExcel.length} 个序号缺照片`);
+    text += ' — ⚠️ ' + parts.join('，');
+    $id('photoStatusText').style.color = 'var(--danger)';
+    // 同时把缺失的序号存下来供展示
+    $id('photoStatus').dataset.extra = extraPhotos;
+    $id('photoStatus').dataset.missing = missingExcel.join('、');
+  } else if (photos.length === excelIds.length) {
+    text += ' — ✓ 全部匹配';
+    $id('photoStatusText').style.color = 'var(--success)';
+  } else {
+    $id('photoStatusText').style.color = '';
+  }
+  $id('photoStatusText').textContent = text;
+}
+
+function updateStats() {
+  const matched = photos.filter(p => p.matched).length;
+  const unmatched = photos.length - matched;
+  const excelCount = excelData.filter(r => r.id).length;
+  $id('statsBar').style.display = (photos.length || excelCount) ? 'flex' : 'none';
+  $id('statMatched').textContent = matched;
+  $id('statUnmatched').textContent = unmatched;
+  $id('statTotal').textContent = photos.length;
+
+  // Excel 统计
+  if (excelCount > 0) {
+    const matchedExcel = new Set();
+    photos.filter(p => p.matched).forEach(p => { if (p.excelRow && p.excelRow.id) matchedExcel.add(p.excelRow.id.trim()); });
+    const missingExcel = excelCount - matchedExcel.size;
+    $id('statExcelInfo').style.display = 'inline';
+    $id('statExcelInfo').style.color = 'var(--gray-500)';
+    $id('statExcelInfo').textContent = `| Excel ${excelCount} 条`;
+    // 数量不匹配警告
+    if (photos.length !== excelCount || unmatched > 0 || missingExcel > 0) {
+      $id('statMismatchWarn').style.display = 'inline';
+      const warns = [];
+      if (photos.length !== excelCount) warns.push(`照片${photos.length}≠Excel${excelCount}`);
+      if (missingExcel > 0) warns.push(`${missingExcel}序号缺照片`);
+      $id('statMismatchWarn').textContent = '⚠ ' + warns.join(' | ');
+      // 也让已匹配数字变红
+      $id('statMatched').style.color = 'var(--danger)';
+    } else {
+      $id('statMismatchWarn').style.display = 'none';
+      $id('statMatched').style.color = '';
+    }
+  } else {
+    $id('statExcelInfo').style.display = 'none';
+    $id('statMismatchWarn').style.display = 'none';
+    $id('statMatched').style.color = '';
+  }
+}
+
+// ============================================================
+//  Render Photo Grid
+// ============================================================
+function renderPhotoGrid() {
+  const area = $id('previewArea');
+  if (!photos.length) {
+    area.innerHTML = `<div class="empty-state"><div class="empty-icon">📷</div><div class="empty-text">暂无照片</div><div class="empty-sub">请先导入 Excel 明细表，再导入对应照片</div></div>`;
+    return;
+  }
+  area.innerHTML = '';
+  photos.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'photo-card' + (p.selected ? ' selected' : '');
+    card.dataset.index = i;
+    card.onclick = (e) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        toggleSelectPhoto(i);
+      } else {
+        openPreview(i);
+      }
+    };
+
+    const badge = p.done
+      ? `<span class="photo-status-badge badge-done">✓ 已打水印</span>`
+      : p.matched
+      ? `<span class="photo-status-badge badge-matched">已匹配</span>`
+      : `<span class="photo-status-badge badge-unmatched">未匹配</span>`;
+
+    const meta = p.excelRow
+      ? `<div>${p.excelRow.date || '—'} ${p.excelRow.time || ''}</div><div>${p.excelRow.location || '—'}</div>`
+      : '<div style="color:var(--gray-400)">无 Excel 数据</div>';
+
+    const imgSrc = p.watermarkedDataUrl || p.url;
+    card.innerHTML = `
+      <img class="photo-thumb" src="${imgSrc}" loading="lazy" onerror="this.style.display='none'">
+      ${badge}
+      <button class="photo-delete-btn" title="删除此照片">×</button>
+      <div class="photo-info">
+        <div class="photo-name" title="${p.name}">${p.name}</div>
+        <div class="photo-meta">${meta}</div>
+      </div>
+    `;
+    // 删除按钮点击事件（阻止冒泡，避免触发预览）
+    const delBtn = card.querySelector('.photo-delete-btn');
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      deletePhoto(i);
+    };
+    area.appendChild(card);
+  });
+
+  updateSelectedButtons();
+}
+
+function toggleSelectPhoto(index) {
+  photos[index].selected = !photos[index].selected;
+  renderPhotoGrid();
+}
+
+function updateSelectedButtons() {
+  const sel = photos.filter(p => p.selected).length;
+  const hasPhotos = photos.length > 0;
+  // 预览按钮只要有照片就可用，不强制要求先选中
+  $id('btnPreviewSelected').disabled = !hasPhotos;
+  $id('btnBatchPreview').disabled = !hasPhotos;
+  $id('btnExportSelected').disabled = sel === 0;
+  if (sel > 0) {
+    $id('btnPreviewSelected').textContent = `单张预览 (${sel})`;
+    $id('btnBatchPreview').textContent = `批量预览 (${sel})`;
+    $id('btnExportSelected').textContent = `导出选中 (${sel})`;
+  } else {
+    $id('btnPreviewSelected').textContent = '单张预览';
+    $id('btnBatchPreview').textContent = '批量预览（全部）';
+    $id('btnExportSelected').textContent = '导出选中';
+  }
+}
+
+function clearPhotos() {
+  photos.forEach(p => URL.revokeObjectURL(p.url));
+  photos = [];
+  // 重置文件输入框，否则重新选相同文件时 onchange 不触发
+  const photoInput = document.querySelector('#photoZone input[type="file"]');
+  if (photoInput) photoInput.value = '';
+  renderPhotoGrid();
+  updateStats();
+  $id('photoStatus').classList.remove('show');
+  $id('btnConfirmExport').disabled = true;
+  $id('btnConfirmExport').style.display = '';
+  $id('btnExportAll').style.display = 'none';
+}
+
+function deletePhoto(index) {
+  if (index < 0 || index >= photos.length) return;
+  // 释放 Blob URL 避免内存泄漏
+  URL.revokeObjectURL(photos[index].url);
+  photos.splice(index, 1);
+  matchPhotos();
+  renderPhotoGrid();
+  if (photos.length === 0) {
+    $id('photoStatus').classList.remove('show');
+    $id('btnConfirmExport').disabled = true;
+    $id('btnConfirmExport').style.display = '';
+    $id('btnExportAll').style.display = 'none';
+  }
+}
+
+function toggleView() {
+  isListView = !isListView;
+  const area = $id('previewArea');
+  area.classList.toggle('list-view', isListView);
+}
+
+// ============================================================
+//  Watermark Engine
+// ============================================================
+function getWatermarkConfig() {
+  return {
+    showDate: $id('toggleDate').checked,
+    showTime: $id('toggleTime').checked,
+    showWeekday: $id('toggleWeekday').checked,
+    showLocation: $id('toggleLocation').checked,
+    showLocationIcon: $id('toggleLocationIcon').checked,
+    showId: $id('toggleId').checked,
+    fontSize: parseInt($id('fontSize').value),
+    color: $id('colorPicker').value,
+    opacity: parseInt($id('opacity').value) / 100,
+    bgOpacity: parseInt($id('bgOpacity').value) / 100,
+    padding: parseInt($id('padding').value),
+    borderRadius: parseInt($id('borderRadius').value),
+    position: selectedPos,
+    maxWidthPct: parseInt($id('maxWidth').value),
+    quality: parseInt($id('quality').value) / 100,
+  };
+}
+
+function getCustomWatermarkConfig() {
+  return {
+    enabled: $id('toggleCustom').checked,
+    text: $id('customText').value.trim(),
+    fontSize: parseInt($id('customFontSize').value),
+    color: $id('customColorPicker').value,
+    opacity: parseInt($id('customOpacity').value) / 100,
+    bgOpacity: parseInt($id('customBgOpacity').value) / 100,
+    padding: parseInt($id('customPadding').value),
+    borderRadius: parseInt($id('customBorderRadius').value),
+    position: customSelectedPos,
+    maxWidthPct: parseInt($id('customMaxWidth').value),
+  };
+}
+
+function buildWatermarkLines(cfg, excelRow) {
+  const lines = [];
+  if (excelRow) {
+    if (cfg.showId && excelRow.id) lines.push('编号：' + excelRow.id);
+    if (cfg.showDate && excelRow.date) {
+      let dateStr = excelRow.date;
+      if (cfg.showWeekday) {
+        const wd = getWeekday(excelRow.date);
+        if (wd) dateStr += '  ' + wd;
+      }
+      lines.push(dateStr);
+    } else if (cfg.showWeekday && excelRow.date) {
+      const wd = getWeekday(excelRow.date);
+      if (wd) lines.push(wd);
+    }
+    if (cfg.showTime && excelRow.time) lines.push(excelRow.time);
+    if (cfg.showLocation && excelRow.location) lines.push((cfg.showLocationIcon ? '📍 ' : '') + excelRow.location);
+  } else {
+    // No excel data - show placeholder
+    if (cfg.showDate) lines.push(new Date().toISOString().split('T')[0] + (cfg.showWeekday ? '  ' + WEEKDAYS[new Date().getDay()] : ''));
+    if (cfg.showTime) lines.push(new Date().toTimeString().split(' ')[0].substring(0,5));
+    if (cfg.showLocation) lines.push((cfg.showLocationIcon ? '📍 ' : '') + '未知地点');
+  }
+  return lines;
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return {r,g,b};
+}
+
+function drawWatermark(canvas, img, cfg, excelRow) {
+  const ctx = canvas.getContext('2d');
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
+  ctx.drawImage(img, 0, 0);
+
+  // ---- 数据水印 ----
+  const rawLines = buildWatermarkLines(cfg, excelRow);
+  if (rawLines.length) {
+    drawWatermarkBlock(ctx, canvas, rawLines, cfg);
+  }
+
+  // ---- 自定义水印（独立样式、独立位置） ----
+  const customCfg = getCustomWatermarkConfig();
+  if (customCfg.enabled && customCfg.text) {
+    drawWatermarkBlock(ctx, canvas, [customCfg.text], customCfg);
+  }
+}
+
+function drawWatermarkBlock(ctx, canvas, rawLines, cfg) {
+  const scale = canvas.width / 800;
+  const actualFs = Math.max(cfg.fontSize, Math.min(cfg.fontSize * scale, cfg.fontSize * 3));
+
+  ctx.font = `500 ${actualFs}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
+  ctx.textBaseline = 'top';
+
+  const lineH = actualFs * 1.5;
+  const actualPad = Math.max(cfg.padding, cfg.padding * scale);
+
+  const maxBoxW = canvas.width * (cfg.maxWidthPct / 100) - actualPad * 2;
+  const lines = reflowLines(ctx, rawLines, maxBoxW);
+  if (!lines.length) return;
+
+  const blockW = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0) + actualPad * 2;
+  const blockH = lines.length * lineH + actualPad * 2 - (lineH - actualFs) * 0.5;
+
+  const margin = Math.max(actualFs * 0.8, 8);
+  const pos = cfg.position;
+  let x, y;
+
+  if (pos.endsWith('right'))        x = canvas.width - blockW - margin;
+  else if (pos.endsWith('center'))  x = (canvas.width - blockW) / 2;
+  else                               x = margin;
+
+  if (pos.startsWith('bottom'))     y = canvas.height - blockH - margin;
+  else if (pos.startsWith('mid'))   y = (canvas.height - blockH) / 2;
+  else                               y = margin;
+
+  // Background
+  if (cfg.bgOpacity > 0) {
+    const rgb = hexToRgb(cfg.color);
+    const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+    const bgR = brightness > 128 ? 0 : 255;
+    const bgG = brightness > 128 ? 0 : 255;
+    const bgB = brightness > 128 ? 0 : 255;
+    ctx.save();
+    ctx.fillStyle = `rgba(${bgR},${bgG},${bgB},${cfg.bgOpacity})`;
+    const br = Math.max(cfg.borderRadius, cfg.borderRadius * scale);
+    roundRect(ctx, x, y, blockW, blockH, br);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Text
+  const {r,g,b} = hexToRgb(cfg.color);
+  ctx.fillStyle = `rgba(${r},${g},${b},${cfg.opacity})`;
+  lines.forEach((line, i) => {
+    let tx;
+    if (pos.endsWith('center')) {
+      tx = x + (blockW - ctx.measureText(line).width) / 2;
+    } else {
+      tx = x + actualPad;
+    }
+    ctx.fillText(line, tx, y + actualPad + i * lineH);
+  });
+}
+
+// ---- Reflow: merge or split rawLines to fit within maxBoxW ----
+function reflowLines(ctx, rawLines, maxBoxW) {
+  if (maxBoxW <= 0) return rawLines;
+
+  // First try: merge all onto as few lines as possible (horizontal packing)
+  // Strategy: greedily join with separator until line exceeds maxBoxW, then break
+  const SEP = '  ';
+  const result = [];
+  let current = '';
+
+  for (const raw of rawLines) {
+    if (!current) {
+      current = raw;
+    } else {
+      const trial = current + SEP + raw;
+      const w = ctx.measureText(trial).width;
+      if (w <= maxBoxW) {
+        current = trial;
+      } else {
+        result.push(current);
+        current = raw;
+      }
+    }
+  }
+  if (current) result.push(current);
+
+  // Second pass: if any line still exceeds maxBoxW, split by character
+  const final = [];
+  for (const line of result) {
+    if (ctx.measureText(line).width <= maxBoxW) {
+      final.push(line);
+    } else {
+      // Hard-wrap by character
+      let seg = '';
+      for (const ch of line) {
+        if (ctx.measureText(seg + ch).width > maxBoxW && seg) {
+          final.push(seg);
+          seg = ch;
+        } else {
+          seg += ch;
+        }
+      }
+      if (seg) final.push(seg);
+    }
+  }
+  return final;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// ============================================================
+//  Preview
+// ============================================================
+function openPreview(index) {
+  previewPhotoIndex = index;
+  const p = photos[index];
+  $id('previewModalTitle').textContent = p.name;
+  const img = new Image();
+  img.onload = () => {
+    const canvas = $id('previewCanvas');
+    const cfg = getWatermarkConfig();
+    drawWatermark(canvas, img, cfg, p.excelRow);
+    // Scale for display
+    const maxW = 760;
+    if (canvas.width > maxW) {
+      canvas.style.width = maxW + 'px';
+      canvas.style.height = 'auto';
+    } else {
+      canvas.style.width = '';
+      canvas.style.height = '';
+    }
+  };
+  img.src = p.url;
+  renderExcelTable();
+  $id('previewModal').classList.add('show');
+}
+
+function livePreview() {
+  if (!$id('previewModal').classList.contains('show')) return;
+  if (previewPhotoIndex < 0) return;
+  const p = photos[previewPhotoIndex];
+  if (!p) return;
+  const img = new Image();
+  img.onload = () => {
+    const canvas = $id('previewCanvas');
+    const cfg = getWatermarkConfig();
+    drawWatermark(canvas, img, cfg, p.excelRow);
+    const maxW = 760;
+    if (canvas.width > maxW) { canvas.style.width = maxW + 'px'; canvas.style.height = 'auto'; }
+    else { canvas.style.width = ''; canvas.style.height = ''; }
+  };
+  img.src = p.url;
+}
+
+function refreshOpenPreview() {
+  livePreview();
+}
+
+function closePreviewModal() {
+  $id('previewModal').classList.remove('show');
+  previewPhotoIndex = -1;
+}
+
+function downloadSingle() {
+  if (previewPhotoIndex < 0) return;
+  const p = photos[previewPhotoIndex];
+  const canvas = $id('previewCanvas');
+  const cfg = getWatermarkConfig();
+  const ext = p.name.split('.').pop().toLowerCase();
+  const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+  const dataUrl = canvas.toDataURL(mime, cfg.quality);
+  p.watermarkedDataUrl = dataUrl;
+  p.watermarkedBase64 = dataUrl.split(',')[1];
+  p.watermarkedBlobType = mime;
+  p.done = true;
+  const link = document.createElement('a');
+  link.download = 'watermark_' + p.name.replace(/\.[^.]+$/, '') + (ext === 'png' ? '.png' : '.jpg');
+  link.href = dataUrl;
+  link.click();
+  updateHeaderButtons();
+  renderPhotoGrid();
+}
+
+function previewSelected() {
+  const first = photos.findIndex(p => p.selected);
+  if (first >= 0) {
+    openPreview(first);
+  } else if (photos.length > 0) {
+    // 没有选中时默认预览第一张
+    openPreview(0);
+  }
+}
+
+// ============================================================
+//  Batch Preview
+// ============================================================
+function batchPreview(mode) {
+  // 未选中任何照片时，自动切换为预览全部
+  if (mode === 'selected' && !photos.some(p => p.selected)) {
+    mode = 'all';
+  }
+  batchPreviewMode = mode;
+  const list = mode === 'all' ? photos : photos.filter(p => p.selected);
+  if (!list.length) { showToast('没有可预览的照片'); return; }
+  batchPreviewPhotos = list;
+  $id('batchPreviewTitle').textContent = `批量水印预览（${list.length} 张）`;
+  $id('batchCount').textContent = list.length;
+  $id('batchShowAll').checked = true;
+  $id('btnConfirmFromPreview').textContent = mode === 'all' ? '确认打水印（全部）' : '确认打水印（选中）';
+  $id('batchPreviewModal').classList.add('show');
+  renderBatchPreview();
+}
+
+function renderBatchPreview() {
+  const grid = $id('batchPreviewGrid');
+  grid.innerHTML = '';
+  const showAll = $id('batchShowAll').checked;
+  const cfg = getWatermarkConfig();
+  let rendered = 0;
+
+  batchPreviewPhotos.forEach((p, idx) => {
+    const tag = document.createElement('div');
+    tag.style.cssText = 'background:white;border-radius:var(--radius);overflow:hidden;border:1px solid var(--gray-200);cursor:pointer;';
+    tag.style.display = showAll ? 'block' : (idx < 6 ? 'block' : 'none');
+    if (!showAll && idx >= 6) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'width:100%;display:block;aspect-ratio:4/3;object-fit:cover;';
+    canvas.dataset.index = idx;
+    tag.appendChild(canvas);
+
+    const info = document.createElement('div');
+    const matched = p.matched ? '✓ 已匹配' : '⚠ 未匹配';
+    const color = p.matched ? 'var(--success)' : 'var(--warning)';
+    info.style.cssText = `padding:6px 8px;font-size:11px;color:var(--gray-600);display:flex;justify-content:space-between;align-items:center;`;
+    info.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:4px;">${p.name}</span><span style="color:${color};font-size:10px;white-space:nowrap;">${matched}</span>`;
+    tag.appendChild(info);
+
+    tag.onclick = () => {
+      const i = photos.indexOf(p);
+      if (i >= 0) { closeBatchPreviewModal(); openPreview(i); }
+    };
+
+    grid.appendChild(tag);
+
+    // Draw watermark on canvas
+    const img = new Image();
+    img.onload = () => {
+      drawWatermark(canvas, img, cfg, p.excelRow);
+      rendered++;
+    };
+    img.onerror = () => { rendered++; };
+    img.src = p.url;
+  });
+}
+
+function closeBatchPreviewModal() {
+  $id('batchPreviewModal').classList.remove('show');
+}
+
+// ============================================================
+//  Confirm & Apply Watermark
+// ============================================================
+function showConfirmExport(mode) {
+  confirmExportMode = mode;
+  const list = mode === 'all' ? photos : photos.filter(p => p.selected);
+  if (!list.length) { showToast('没有可操作的照片'); return; }
+  const matched = list.filter(p => p.matched).length;
+  $id('confirmCount').textContent = list.length;
+  $id('confirmMatched').textContent = matched;
+  $id('confirmUnmatched').textContent = list.length - matched;
+  $id('btnConfirmGo').textContent = `确认打水印（${list.length} 张）`;
+  $id('confirmModal').classList.add('show');
+}
+
+function closeConfirmModal() {
+  $id('confirmModal').classList.remove('show');
+}
+
+async function doConfirmExport() {
+  closeConfirmModal();
+  const list = confirmExportMode === 'all' ? photos : photos.filter(p => p.selected);
+  if (!list.length) return;
+
+  const prog = $id('progressContainer');
+  prog.classList.add('show');
+  $id('progressTitle').textContent = '正在为照片添加水印...';
+  $id('progressFill').style.width = '0%';
+  $id('progressText').textContent = `0 / ${list.length}`;
+
+  const cfg = getWatermarkConfig();
+  let done = 0;
+  for (const p of list) {
+    try {
+      const result = await processOnePhoto(p, cfg);
+      p.watermarkedDataUrl = result.dataUrl;
+      p.watermarkedBase64 = result.base64;
+      p.watermarkedBlobType = result.mime;
+      p.done = true;
+    } catch(e) { console.warn('skip', p.name, e); }
+    done++;
+    $id('progressFill').style.width = Math.round(done / list.length * 100) + '%';
+    $id('progressText').textContent = `${done} / ${list.length}`;
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  prog.classList.remove('show');
+  updateHeaderButtons();
+  renderPhotoGrid();
+  showToast(`水印已应用：${done} 张照片`, 3000);
+}
+
+function updateHeaderButtons() {
+  const hasWatermarked = photos.some(p => p.watermarkedBase64);
+  $id('btnConfirmExport').style.display = hasWatermarked ? 'none' : '';
+  $id('btnExportAll').style.display = hasWatermarked ? '' : 'none';
+}
+
+function exportBatchAll() {
+  exportBatch(photos, `watermark_all_${Date.now()}.zip`);
+}
+
+function handleExportSelected() {
+  const list = photos.filter(p => p.selected);
+  if (!list.length) { showToast('没有选中的照片'); return; }
+  const needConfirm = list.some(p => !p.watermarkedBase64);
+  if (needConfirm) {
+    showConfirmExport('selected');
+  } else {
+    exportBatch(list, `watermark_selected_${Date.now()}.zip`);
+  }
+}
+
+// ============================================================
+//  Export
+// ============================================================
+async function processOnePhoto(photo, cfgOverride) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const cfg = cfgOverride || getWatermarkConfig();
+      drawWatermark(canvas, img, cfg, photo.excelRow);
+      const ext = photo.name.split('.').pop().toLowerCase();
+      const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const dataUrl = canvas.toDataURL(mime, cfg.quality);
+      const base64 = dataUrl.split(',')[1];
+      resolve({ dataUrl, mime, base64, name: 'watermark_' + photo.name });
+    };
+    img.onerror = reject;
+    img.src = photo.url;
+  });
+}
+
+async function exportBatch(list, zipName) {
+  if (!list.length) { showToast('没有可导出的照片'); return; }
+
+  // Check if watermarks have been applied
+  const needProcess = list.some(p => !p.watermarkedBase64);
+  if (needProcess) {
+    showToast('请先点击「确认打水印」为照片添加水印');
+    return;
+  }
+
+  const prog = $id('progressContainer');
+  prog.classList.add('show');
+  $id('progressTitle').textContent = '正在打包 ZIP...';
+  $id('progressFill').style.width = '0%';
+  $id('progressText').textContent = `0 / ${list.length}`;
+
+  const zip = new JSZip();
+  let done = 0;
+  for (const p of list) {
+    try {
+      const ext = p.name.split('.').pop().toLowerCase();
+      const outputName = 'watermark_' + p.name.replace(/\.[^.]+$/, '') + '.' + ext;
+      zip.file(outputName, p.watermarkedBase64, {base64:true});
+    } catch(e) { console.warn('skip', p.name, e); }
+    done++;
+    $id('progressFill').style.width = Math.round(done / list.length * 100) + '%';
+    $id('progressText').textContent = `${done} / ${list.length}`;
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  $id('progressTitle').textContent = '正在打包 ZIP...';
+  const blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url; link.download = zipName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+  prog.classList.remove('show');
+  renderPhotoGrid();
+  showToast(`导出完成：${list.length} 张照片`, 3000);
+}
+
+// ============================================================
+//  UI Helpers
+// ============================================================
+function setPosition(pos) {
+  selectedPos = pos;
+  document.querySelectorAll('#positionGrid .pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === pos));
+  refreshOpenPreview();
+}
+
+function setCustomPosition(pos) {
+  customSelectedPos = pos;
+  document.querySelectorAll('#customPositionGrid .pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === pos));
+  refreshOpenPreview();
+}
+
+function pickColor(hex, el, mode) {
+  if (mode === 'custom') {
+    $id('customColorPicker').value = hex;
+    document.querySelectorAll('#customColorPresets .color-preset').forEach(b => b.classList.remove('active'));
+  } else {
+    $id('colorPicker').value = hex;
+    document.querySelectorAll('#colorPresets .color-preset').forEach(b => b.classList.remove('active'));
+  }
+  el.classList.add('active');
+  refreshOpenPreview();
+}
+
+// Sync color picker back to presets
+$id('colorPicker').addEventListener('input', e => {
+  document.querySelectorAll('#colorPresets .color-preset').forEach(b => b.classList.remove('active'));
+  refreshOpenPreview();
+});
+
+$id('customColorPicker').addEventListener('input', e => {
+  document.querySelectorAll('#customColorPresets .color-preset').forEach(b => b.classList.remove('active'));
+  refreshOpenPreview();
+});
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    const names = ['preview','data'];
+    b.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach((c,i) => {
+    const names = ['tabPreview','tabData'];
+    c.classList.toggle('active', c.id === 'tab' + name.charAt(0).toUpperCase() + name.slice(1));
+  });
+}
+
+function renderExcelTable() {
+  const container = $id('excelDataTable');
+  if (!excelData.length) {
+    container.innerHTML = '<div style="color:var(--gray-500); font-size:13px; padding:20px; text-align:center;">尚未导入 Excel 数据</div>';
+    return;
+  }
+  const cols = Object.keys(excelData[0]._raw);
+  let html = '<div class="table-wrap"><table class="data-table"><thead><tr>';
+  cols.forEach(c => { html += `<th>${c}</th>`; });
+  html += '</tr></thead><tbody>';
+  excelData.slice(0, 50).forEach(row => {
+    html += '<tr>';
+    cols.forEach(c => { html += `<td>${row._raw[c] ?? ''}</td>`; });
+    html += '</tr>';
+  });
+  if (excelData.length > 50) html += `<tr><td colspan="${cols.length}" style="text-align:center;color:var(--gray-400);">仅显示前 50 行</td></tr>`;
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+function showHelp() { $id('helpModal').classList.add('show'); }
+function closeHelp() { $id('helpModal').classList.remove('show'); }
+
+// ============================================================
+//  Download Template
+// ============================================================
+function downloadTemplate() {
+  const wb = XLSX.utils.book_new();
+  const data = [
+    { '编号': 'IMG001', '日期': '2024-03-15', '时间': '14:30', '地点': '北京市朝阳区建国路88号', '备注': '现场巡检' },
+    { '编号': 'IMG002', '日期': '2024-03-16', '时间': '09:00', '地点': '上海市浦东新区陆家嘴', '备注': '工程验收' },
+    { '编号': 'IMG003', '日期': '2024-03-17', '时间': '16:45', '地点': '广州市天河区珠江新城', '备注': '' },
+  ];
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:12},{wch:14},{wch:10},{wch:30},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws, '水印数据');
+  XLSX.writeFile(wb, '批量水印模板.xlsx');
+  showToast('模板已下载');
+}
+
+function onToggleLocation() {
+  const on = $id('toggleLocation').checked;
+  const row = $id('locationIconRow');
+  row.style.opacity = on ? '1' : '0.35';
+  row.style.pointerEvents = on ? '' : 'none';
+}
+
+['previewModal','helpModal','confirmModal','batchPreviewModal'].forEach(id => {
+  $id(id).addEventListener('click', e => {
+    if (e.target === $id(id)) $id(id).classList.remove('show');
+  });
+});
+</script>
+</body>
+</html>
