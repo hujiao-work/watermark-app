@@ -379,6 +379,21 @@
   }
   .progress-text { font-size: 12px; color: var(--gray-500); }
 
+  /* ===== Preview Nav ===== */
+  .preview-nav-bar { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  .preview-nav-btn {
+    flex-shrink: 0; width: 44px; height: 80px;
+    background: var(--gray-100); border: 1px solid var(--gray-300);
+    border-radius: 8px; cursor: pointer;
+    font-size: 26px; color: var(--gray-600);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; user-select: none;
+  }
+  .preview-nav-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .preview-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+  .preview-nav-btn:disabled:hover { background: var(--gray-100); color: var(--gray-600); border-color: var(--gray-300); }
+  .preview-nav-counter { font-size: 13px; color: var(--gray-500); text-align: center; margin-top: 8px; }
+
   /* ===== Empty State ===== */
   .empty-state {
     grid-column: 1 / -1;
@@ -827,9 +842,14 @@
         <button class="tab-btn" onclick="switchTab('data')">Excel 数据</button>
       </div>
       <div class="tab-content active" id="tabPreview">
-        <div style="margin-top:16px;" class="canvas-wrapper">
-          <canvas id="previewCanvas"></canvas>
+        <div class="preview-nav-bar">
+          <button class="preview-nav-btn" id="previewNavPrev" onclick="navigatePreview(-1)" title="上一张">&#9664;</button>
+          <div class="canvas-wrapper" style="flex:1;">
+            <canvas id="previewCanvas"></canvas>
+          </div>
+          <button class="preview-nav-btn" id="previewNavNext" onclick="navigatePreview(1)" title="下一张">&#9654;</button>
         </div>
+        <div class="preview-nav-counter" id="previewNavCounter"></div>
       </div>
       <div class="tab-content" id="tabData">
         <div style="margin-top:16px;" id="excelDataTable">
@@ -1851,6 +1871,10 @@ function openPreview(index) {
   const p = photos[index];
   $id('previewModalTitle').textContent = p.name;
   $id('previewModal').classList.add('show');
+  // Update nav button states
+  $id('previewNavPrev').disabled = (index <= 0);
+  $id('previewNavNext').disabled = (index >= photos.length - 1);
+  $id('previewNavCounter').textContent = (index + 1) + ' / ' + photos.length;
   const img = new Image();
   img.onload = () => {
     const canvas = $id('previewCanvas');
@@ -1883,6 +1907,12 @@ function livePreview() {
 
 function refreshOpenPreview() {
   livePreview();
+}
+
+function navigatePreview(direction) {
+  const newIndex = previewPhotoIndex + direction;
+  if (newIndex < 0 || newIndex >= photos.length) return;
+  openPreview(newIndex);
 }
 
 function closePreviewModal() {
@@ -2229,6 +2259,13 @@ function onToggleLocation() {
 // 页面加载自动恢复上次保存的设置
 loadDataWatermarkSettings();
 loadCustomWatermarkSettings();
+
+// 键盘导航：← → 切换预览
+document.addEventListener('keydown', e => {
+  if (!$id('previewModal').classList.contains('show')) return;
+  if (e.key === 'ArrowLeft') { e.preventDefault(); navigatePreview(-1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); navigatePreview(1); }
+});
 </script>
 </body>
 </html>
