@@ -343,10 +343,16 @@
 
   /* ===== Preview Canvas Wrapper ===== */
   .canvas-wrapper {
-    display: flex; justify-content: center; align-items: flex-start;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 60px;
   }
   #previewCanvas {
-    max-width: 100%; height: auto;
+    display: block;
+    max-width: 100%;
+    max-height: calc(90vh - 220px);
+    width: auto;
+    height: auto;
+    object-fit: scale-down;
     border-radius: var(--radius);
     box-shadow: var(--shadow);
   }
@@ -454,6 +460,29 @@
   ::-webkit-scrollbar-thumb:hover { background: var(--gray-400); }
 
   .divider { height: 1px; background: var(--gray-100); margin: 8px 0; }
+
+  /* ===== Settings Save/Reset Buttons ===== */
+  .save-bar {
+    display: flex; gap: 6px; margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--gray-100);
+  }
+  .btn-save {
+    flex: 1; padding: 6px 10px; border-radius: var(--radius);
+    border: 1px solid var(--gray-300); background: white;
+    font-size: 12px; color: var(--gray-700); cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .btn-save:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+  .btn-save.saved { background: var(--success-light); border-color: var(--success); color: var(--success); }
+  .btn-reset {
+    flex: 1; padding: 6px 10px; border-radius: var(--radius);
+    border: 1px solid var(--gray-300); background: white;
+    font-size: 12px; color: var(--gray-500); cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .btn-reset:hover { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
 </style>
 </head>
 <body>
@@ -557,6 +586,14 @@
       </div>
 
       <div class="form-row">
+        <label class="form-label">时间字号</label>
+        <div class="range-row">
+          <input type="range" min="10" max="120" value="48" id="headlineFontSize" oninput="updateRangeVal('headlineFontSize','headlineFontSizeVal')">
+          <span class="range-value" id="headlineFontSizeVal">48</span>
+        </div>
+      </div>
+
+      <div class="form-row">
         <label class="form-label">水印颜色</label>
         <div class="color-picker-row">
           <input type="color" id="colorPicker" value="#ffffff">
@@ -632,6 +669,10 @@
           <input type="range" min="50" max="100" value="92" id="quality" oninput="updateRangeVal('quality','qualityVal')">
           <span class="range-value" id="qualityVal">92</span>
         </div>
+      </div>
+      <div class="save-bar">
+        <button class="btn-save" onclick="saveDataWatermarkSettings()" id="btnSaveData">💾 保存设置</button>
+        <button class="btn-reset" onclick="clearDataWatermarkSettings()">🔄 恢复默认</button>
       </div>
     </div>
 
@@ -723,6 +764,10 @@
           <div class="pos-btn" data-pos="bottom-center" onclick="setCustomPosition('bottom-center')">下中</div>
           <div class="pos-btn" data-pos="bottom-right" onclick="setCustomPosition('bottom-right')">右下</div>
         </div>
+      </div>
+      <div class="save-bar">
+        <button class="btn-save" onclick="saveCustomWatermarkSettings()" id="btnSaveCustom">💾 保存设置</button>
+        <button class="btn-reset" onclick="clearCustomWatermarkSettings()">🔄 恢复默认</button>
       </div>
     </div>
 
@@ -1022,7 +1067,7 @@ function processExcel(file) {
         const location = find(['地点','位置','地址','location','address','place']);
         const remark = find(['备注','remark','note','自定义','说明']);
         return { id: String(id).trim(), date, time, location, remark, _raw: row };
-      });
+      }).filter(r => r.id);  // 过滤掉编号为空的行（被清空但未删除的行）
 
       $id('excelStatus').classList.add('show');
       $id('excelStatusText').textContent = `已加载 ${excelData.length} 条记录`;
@@ -1040,9 +1085,19 @@ function processExcel(file) {
 // ============================================================
 //  Photo Processing
 // ============================================================
+const MAX_PHOTOS = 1000;
+
 function processPhotos(fileList) {
+  // 检查上限
+  if (photos.length >= MAX_PHOTOS) {
+    showToast(`已达到单次上限 ${MAX_PHOTOS} 张，请先清空或导出后再添加`);
+    return;
+  }
+  const available = MAX_PHOTOS - photos.length;
+  const skipped = [];
   const newPhotos = [];
   Array.from(fileList).forEach(file => {
+    if (newPhotos.length >= available) { skipped.push(file.name); return; }
     if (!file.type.startsWith('image/')) return;
     const url = URL.createObjectURL(file);
     const baseName = file.name.replace(/\.[^.]+$/, '');
@@ -1050,7 +1105,10 @@ function processPhotos(fileList) {
   });
   photos = [...photos, ...newPhotos];
   $id('photoStatus').classList.add('show');
-  $id('photoStatusText').textContent = `已加载 ${photos.length} 张照片`;
+  $id('photoStatusText').textContent = `已加载 ${photos.length} / ${MAX_PHOTOS} 张照片`;
+  if (skipped.length) {
+    showToast(`已跳过 ${skipped.length} 张（达到 ${MAX_PHOTOS} 上限）`);
+  }
   $id('btnConfirmExport').disabled = photos.length === 0;
   // Reset to confirm state when new photos added
   $id('btnConfirmExport').style.display = '';
@@ -1273,6 +1331,7 @@ function getWatermarkConfig() {
     position: selectedPos,
     maxWidthPct: parseInt($id('maxWidth').value),
     quality: parseInt($id('quality').value) / 100,
+    headlineFontSize: parseInt($id('headlineFontSize').value),
   };
 }
 
@@ -1291,30 +1350,202 @@ function getCustomWatermarkConfig() {
   };
 }
 
+// ============================================================
+//  Settings Persistence (localStorage)
+// ============================================================
+const STORAGE_KEY_DATA = 'wm_data_cfg';
+const STORAGE_KEY_CUSTOM = 'wm_custom_cfg';
+
+/* ---- 数据水印 保存/加载/清除 ---- */
+function saveDataWatermarkSettings() {
+  const cfg = getWatermarkConfig();
+  const data = {
+    showDate: cfg.showDate,
+    showTime: cfg.showTime,
+    showWeekday: cfg.showWeekday,
+    showLocation: cfg.showLocation,
+    showLocationIcon: cfg.showLocationIcon,
+    showId: cfg.showId,
+    fontSize: cfg.fontSize,
+    color: cfg.color,
+    opacity: Math.round(cfg.opacity * 100),
+    bgOpacity: Math.round(cfg.bgOpacity * 100),
+    padding: cfg.padding,
+    borderRadius: cfg.borderRadius,
+    position: cfg.position,
+    maxWidthPct: cfg.maxWidthPct,
+    quality: Math.round(cfg.quality * 100),
+    headlineFontSize: cfg.headlineFontSize,
+  };
+  localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(data));
+  const btn = $id('btnSaveData');
+  btn.classList.add('saved');
+  btn.textContent = '✅ 已保存';
+  setTimeout(() => { btn.classList.remove('saved'); btn.textContent = '💾 保存设置'; }, 2000);
+}
+
+function loadDataWatermarkSettings() {
+  const raw = localStorage.getItem(STORAGE_KEY_DATA);
+  if (!raw) return;
+  try {
+    const d = JSON.parse(raw);
+    if (typeof d.showDate === 'boolean') { $id('toggleDate').checked = d.showDate; }
+    if (typeof d.showTime === 'boolean') { $id('toggleTime').checked = d.showTime; }
+    if (typeof d.showWeekday === 'boolean') { $id('toggleWeekday').checked = d.showWeekday; }
+    if (typeof d.showLocation === 'boolean') {
+      $id('toggleLocation').checked = d.showLocation;
+      onToggleLocation();
+    }
+    if (typeof d.showLocationIcon === 'boolean') { $id('toggleLocationIcon').checked = d.showLocationIcon; }
+    if (typeof d.showId === 'boolean') { $id('toggleId').checked = d.showId; }
+    if (typeof d.fontSize === 'number') {
+      $id('fontSize').value = d.fontSize; updateRangeVal('fontSize', 'fontSizeVal');
+    }
+    if (typeof d.color === 'string') { $id('colorPicker').value = d.color; }
+    if (typeof d.opacity === 'number') {
+      $id('opacity').value = d.opacity; updateRangeVal('opacity', 'opacityVal');
+    }
+    if (typeof d.bgOpacity === 'number') {
+      $id('bgOpacity').value = d.bgOpacity; updateRangeVal('bgOpacity', 'bgOpacityVal');
+    }
+    if (typeof d.padding === 'number') {
+      $id('padding').value = d.padding; updateRangeVal('padding', 'paddingVal');
+    }
+    if (typeof d.borderRadius === 'number') {
+      $id('borderRadius').value = d.borderRadius; updateRangeVal('borderRadius', 'borderRadiusVal');
+    }
+    if (typeof d.position === 'string') {
+      selectedPos = d.position;
+      document.querySelectorAll('#positionGrid .pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === d.position));
+    }
+    if (typeof d.maxWidthPct === 'number') {
+      $id('maxWidth').value = d.maxWidthPct; updateRangeVal('maxWidth', 'maxWidthVal');
+    }
+    if (typeof d.headlineFontSize === 'number') {
+      $id('headlineFontSize').value = d.headlineFontSize; updateRangeVal('headlineFontSize', 'headlineFontSizeVal');
+    }
+    if (typeof d.quality === 'number') {
+      $id('quality').value = d.quality; updateRangeVal('quality', 'qualityVal');
+    }
+    // 还原颜色预设选中状态
+    if (typeof d.color === 'string') {
+      document.querySelectorAll('#colorPresets .color-preset').forEach(p => p.classList.toggle('active', p.dataset.color === d.color));
+    }
+  } catch(e) { /* corrupted data, ignore */ }
+}
+
+function clearDataWatermarkSettings() {
+  localStorage.removeItem(STORAGE_KEY_DATA);
+  location.reload();
+}
+
+/* ---- 自定义水印 保存/加载/清除 ---- */
+function saveCustomWatermarkSettings() {
+  const cfg = getCustomWatermarkConfig();
+  const data = {
+    enabled: cfg.enabled,
+    text: cfg.text,
+    fontSize: cfg.fontSize,
+    color: cfg.color,
+    opacity: Math.round(cfg.opacity * 100),
+    bgOpacity: Math.round(cfg.bgOpacity * 100),
+    padding: cfg.padding,
+    borderRadius: cfg.borderRadius,
+    position: cfg.position,
+    maxWidthPct: cfg.maxWidthPct,
+  };
+  localStorage.setItem(STORAGE_KEY_CUSTOM, JSON.stringify(data));
+  const btn = $id('btnSaveCustom');
+  btn.classList.add('saved');
+  btn.textContent = '✅ 已保存';
+  setTimeout(() => { btn.classList.remove('saved'); btn.textContent = '💾 保存设置'; }, 2000);
+}
+
+function loadCustomWatermarkSettings() {
+  const raw = localStorage.getItem(STORAGE_KEY_CUSTOM);
+  if (!raw) return;
+  try {
+    const d = JSON.parse(raw);
+    if (typeof d.enabled === 'boolean') { $id('toggleCustom').checked = d.enabled; }
+    if (typeof d.text === 'string') { $id('customText').value = d.text; }
+    if (typeof d.fontSize === 'number') {
+      $id('customFontSize').value = d.fontSize; updateRangeVal('customFontSize', 'customFontSizeVal');
+    }
+    if (typeof d.color === 'string') { $id('customColorPicker').value = d.color; }
+    if (typeof d.opacity === 'number') {
+      $id('customOpacity').value = d.opacity; updateRangeVal('customOpacity', 'customOpacityVal');
+    }
+    if (typeof d.bgOpacity === 'number') {
+      $id('customBgOpacity').value = d.bgOpacity; updateRangeVal('customBgOpacity', 'customBgOpacityVal');
+    }
+    if (typeof d.padding === 'number') {
+      $id('customPadding').value = d.padding; updateRangeVal('customPadding', 'customPaddingVal');
+    }
+    if (typeof d.borderRadius === 'number') {
+      $id('customBorderRadius').value = d.borderRadius; updateRangeVal('customBorderRadius', 'customBorderRadiusVal');
+    }
+    if (typeof d.position === 'string') {
+      customSelectedPos = d.position;
+      document.querySelectorAll('#customPositionGrid .pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === d.position));
+    }
+    if (typeof d.maxWidthPct === 'number') {
+      $id('customMaxWidth').value = d.maxWidthPct; updateRangeVal('customMaxWidth', 'customMaxWidthVal');
+    }
+    // 还原颜色预设选中状态
+    if (typeof d.color === 'string') {
+      document.querySelectorAll('#customColorPresets .color-preset').forEach(p => p.classList.toggle('active', p.dataset.color === d.color));
+    }
+  } catch(e) { /* corrupted data, ignore */ }
+}
+
+function clearCustomWatermarkSettings() {
+  localStorage.removeItem(STORAGE_KEY_CUSTOM);
+  location.reload();
+}
+
 function buildWatermarkLines(cfg, excelRow) {
-  const lines = [];
+  // 新布局：
+  //   headline  = 时间（行1，超大字）
+  //   dateLine  = 日期 + 星期 拼接（行2 前半段）
+  //   location  = 地点文本（行2 后半段；过长时独立换行）
+  //   idLine    = 编号（额外附加行）
+  const result = { headline: '', dateLine: '', location: '', idLine: '', signature: '' };
+
   if (excelRow) {
-    if (cfg.showId && excelRow.id) lines.push('编号：' + excelRow.id);
+    if (cfg.showTime && excelRow.time) {
+      result.headline = excelRow.time;
+    }
+    // 日期 + 星期 拼为一段
     if (cfg.showDate && excelRow.date) {
-      let dateStr = excelRow.date;
+      result.dateLine = excelRow.date;
       if (cfg.showWeekday) {
         const wd = getWeekday(excelRow.date);
-        if (wd) dateStr += '  ' + wd;
+        if (wd) result.dateLine += '  ' + wd;
       }
-      lines.push(dateStr);
     } else if (cfg.showWeekday && excelRow.date) {
       const wd = getWeekday(excelRow.date);
-      if (wd) lines.push(wd);
+      if (wd) result.dateLine = wd;
     }
-    if (cfg.showTime && excelRow.time) lines.push(excelRow.time);
-    if (cfg.showLocation && excelRow.location) lines.push((cfg.showLocationIcon ? '📍 ' : '') + excelRow.location);
+    // 地点单独存
+    if (cfg.showLocation && excelRow.location) {
+      result.location = (cfg.showLocationIcon ? '📍 ' : '') + excelRow.location;
+    }
+    if (cfg.showId && excelRow.id) {
+      result.idLine = '编号：' + excelRow.id;
+    }
   } else {
-    // No excel data - show placeholder
-    if (cfg.showDate) lines.push(new Date().toISOString().split('T')[0] + (cfg.showWeekday ? '  ' + WEEKDAYS[new Date().getDay()] : ''));
-    if (cfg.showTime) lines.push(new Date().toTimeString().split(' ')[0].substring(0,5));
-    if (cfg.showLocation) lines.push((cfg.showLocationIcon ? '📍 ' : '') + '未知地点');
+    // 无 Excel 数据 — 占位
+    if (cfg.showTime) result.headline = new Date().toTimeString().split(' ')[0].substring(0,5);
+    if (cfg.showDate) {
+      result.dateLine = new Date().toISOString().split('T')[0];
+      if (cfg.showWeekday) result.dateLine += '  ' + WEEKDAYS[new Date().getDay()];
+    } else if (cfg.showWeekday) {
+      result.dateLine = WEEKDAYS[new Date().getDay()];
+    }
+    if (cfg.showLocation) result.location = (cfg.showLocationIcon ? '📍 ' : '') + '未知地点';
   }
-  return lines;
+
+  return result;
 }
 
 function hexToRgb(hex) {
@@ -1324,16 +1555,147 @@ function hexToRgb(hex) {
   return {r,g,b};
 }
 
+// ---- 分层水印绘制（数据水印专用） ----
+// 行1 = 时间（headline，超大加粗）
+// 行2 = 日期 + 星期 + 地点（同一行，地点过长则独立换行到行3+）
+function drawStructuredWatermark(ctx, canvas, data, cfg) {
+  const scale = canvas.width / 800;
+  const baseFs = Math.max(cfg.fontSize, Math.min(cfg.fontSize * scale, cfg.fontSize * 3));
+  const headlineFs = Math.max(10, Math.min(cfg.headlineFontSize * scale, cfg.headlineFontSize * 3));
+  const subFs = baseFs;
+  const sigFs = baseFs * 0.55;
+  const pad = Math.max(cfg.padding, cfg.padding * scale);
+  const gapV = subFs * 0.25;
+  const lineH = subFs * 1.35;
+  const SEP = '  '; // 日期/星期/地点之间的分隔空格
+
+  ctx.textBaseline = 'top';
+  const subFont = `400 ${subFs}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
+  ctx.font = subFont;
+
+  // ---- 组装第二行：判断地点是否能和日期+星期放在一行 ----
+  // maxBoxW 约束：用 maxWidthPct 限制整体宽度
+  const maxBoxW = canvas.width * (cfg.maxWidthPct / 100) - pad * 2;
+
+  // datePart = 日期 + 星期
+  const datePart = data.dateLine || '';
+  // locationPart = 地点（可能为空）
+  const locationPart = data.location || '';
+
+  // 尝试拼合
+  let row2Parts = []; // 第二行（日期+星期+地点 或 只有日期+星期 或 只有地点）
+  let locationRows = []; // 地点独立换行时用
+
+  if (datePart && locationPart) {
+    const combined = datePart + SEP + locationPart;
+    ctx.font = subFont;
+    if (maxBoxW <= 0 || ctx.measureText(combined).width <= maxBoxW) {
+      // 放得下：日期+星期+地点同一行
+      row2Parts = [combined];
+    } else {
+      // 放不下：日期+星期单独一行，地点独立换行
+      row2Parts = [datePart];
+      // 地点内容做字符级换行（若单行地点也超宽）
+      locationRows = wrapTextByChar(ctx, locationPart, maxBoxW > 0 ? maxBoxW : Infinity);
+    }
+  } else if (datePart) {
+    row2Parts = [datePart];
+  } else if (locationPart) {
+    locationRows = wrapTextByChar(ctx, locationPart, maxBoxW > 0 ? maxBoxW : Infinity);
+  }
+
+  // 编号行（可选）
+  const idRows = data.idLine ? [data.idLine] : [];
+
+  // ---- 测量所有行宽 ----
+  ctx.font = `700 ${headlineFs}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
+  const headlineW = data.headline ? ctx.measureText(data.headline).width : 0;
+
+  ctx.font = subFont;
+  const allSubRows = [...row2Parts, ...locationRows, ...idRows];
+  const subWidths = allSubRows.map(l => ctx.measureText(l).width);
+
+  let maxLineW = headlineW;
+  for (const w of subWidths) maxLineW = Math.max(maxLineW, w);
+
+  // ---- 计算块尺寸 ----
+  const blockW = maxLineW + pad * 2;
+  let blockH = pad * 2;
+  if (data.headline) blockH += headlineFs + gapV;
+  if (allSubRows.length) blockH += lineH * allSubRows.length;
+
+  // ---- 定位 ----
+  const margin = Math.max(baseFs * 0.8, 8);
+  const pos = cfg.position;
+  let x, y;
+
+  if (pos.endsWith('right'))        x = canvas.width - blockW - margin;
+  else if (pos.endsWith('center'))  x = (canvas.width - blockW) / 2;
+  else                               x = margin;
+
+  if (pos.startsWith('bottom'))     y = canvas.height - blockH - margin;
+  else if (pos.startsWith('mid'))   y = (canvas.height - blockH) / 2;
+  else                               y = margin;
+
+  // ---- 背景 ----
+  if (cfg.bgOpacity > 0) {
+    const rgb = hexToRgb(cfg.color);
+    const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+    const bgR = brightness > 128 ? 0 : 255;
+    const bgG = brightness > 128 ? 0 : 255;
+    const bgB = brightness > 128 ? 0 : 255;
+    ctx.save();
+    ctx.fillStyle = `rgba(${bgR},${bgG},${bgB},${cfg.bgOpacity})`;
+    const br = Math.max(cfg.borderRadius, cfg.borderRadius * scale);
+    roundRect(ctx, x, y, blockW, blockH, br);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ---- 文字 ----
+  const {r,g,b} = hexToRgb(cfg.color);
+  let cy = y + pad;
+
+  // ① 时间 — 超大加粗
+  if (data.headline) {
+    ctx.font = `700 ${headlineFs}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
+    ctx.fillStyle = `rgba(${r},${g},${b},${cfg.opacity})`;
+    const hx = pos.endsWith('center') ? x + (blockW - headlineW) / 2 : x + pad;
+    ctx.fillText(data.headline, hx, cy);
+    cy += headlineFs + gapV;
+  }
+
+  // ② 第二行及以后（日期+星期+地点 / 日期+星期 / 地点换行 / 编号）
+  if (allSubRows.length) {
+    ctx.font = subFont;
+    ctx.fillStyle = `rgba(${r},${g},${b},${cfg.opacity})`;
+    for (let i = 0; i < allSubRows.length; i++) {
+      const sx = pos.endsWith('center') ? x + (blockW - subWidths[i]) / 2 : x + pad;
+      ctx.fillText(allSubRows[i], sx, cy);
+      cy += lineH;
+    }
+  }
+
+  // ③ Signature（小字，当前为空）
+  if (data.signature) {
+    ctx.font = `400 ${sigFs}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
+    ctx.fillStyle = `rgba(${r},${g},${b},${cfg.opacity * 0.65})`;
+    const sigW = ctx.measureText(data.signature).width;
+    const sigM = baseFs * 0.8;
+    ctx.fillText(data.signature, canvas.width - sigW - sigM, canvas.height - sigM - sigFs);
+  }
+}
+
 function drawWatermark(canvas, img, cfg, excelRow) {
   const ctx = canvas.getContext('2d');
   canvas.width = img.naturalWidth || img.width;
   canvas.height = img.naturalHeight || img.height;
   ctx.drawImage(img, 0, 0);
 
-  // ---- 数据水印 ----
-  const rawLines = buildWatermarkLines(cfg, excelRow);
-  if (rawLines.length) {
-    drawWatermarkBlock(ctx, canvas, rawLines, cfg);
+  // ---- 数据水印（分层布局：时间超大 + 信息正常 + 签名小字） ----
+  const data = buildWatermarkLines(cfg, excelRow);
+  if (data.headline || data.dateLine || data.location || data.idLine) {
+    drawStructuredWatermark(ctx, canvas, data, cfg);
   }
 
   // ---- 自定义水印（独立样式、独立位置） ----
@@ -1399,6 +1761,24 @@ function drawWatermarkBlock(ctx, canvas, rawLines, cfg) {
     }
     ctx.fillText(line, tx, y + actualPad + i * lineH);
   });
+}
+
+// ---- wrapTextByChar: 对单段文本按字符换行 ----
+function wrapTextByChar(ctx, text, maxBoxW) {
+  if (!text) return [];
+  if (maxBoxW <= 0 || ctx.measureText(text).width <= maxBoxW) return [text];
+  const lines = [];
+  let seg = '';
+  for (const ch of text) {
+    if (ctx.measureText(seg + ch).width > maxBoxW && seg) {
+      lines.push(seg);
+      seg = ch;
+    } else {
+      seg += ch;
+    }
+  }
+  if (seg) lines.push(seg);
+  return lines;
 }
 
 // ---- Reflow: merge or split rawLines to fit within maxBoxW ----
@@ -1470,24 +1850,18 @@ function openPreview(index) {
   previewPhotoIndex = index;
   const p = photos[index];
   $id('previewModalTitle').textContent = p.name;
+  $id('previewModal').classList.add('show');
   const img = new Image();
   img.onload = () => {
     const canvas = $id('previewCanvas');
     const cfg = getWatermarkConfig();
     drawWatermark(canvas, img, cfg, p.excelRow);
-    // Scale for display
-    const maxW = 760;
-    if (canvas.width > maxW) {
-      canvas.style.width = maxW + 'px';
-      canvas.style.height = 'auto';
-    } else {
-      canvas.style.width = '';
-      canvas.style.height = '';
-    }
+    // 清除 JS 强制尺寸，让 CSS 的 max-width/max-height/object-fit 自动适配
+    canvas.style.width = '';
+    canvas.style.height = '';
   };
   img.src = p.url;
   renderExcelTable();
-  $id('previewModal').classList.add('show');
 }
 
 function livePreview() {
@@ -1500,9 +1874,9 @@ function livePreview() {
     const canvas = $id('previewCanvas');
     const cfg = getWatermarkConfig();
     drawWatermark(canvas, img, cfg, p.excelRow);
-    const maxW = 760;
-    if (canvas.width > maxW) { canvas.style.width = maxW + 'px'; canvas.style.height = 'auto'; }
-    else { canvas.style.width = ''; canvas.style.height = ''; }
+    // 清除 JS 强制尺寸，让 CSS 自动适配
+    canvas.style.width = '';
+    canvas.style.height = '';
   };
   img.src = p.url;
 }
@@ -1580,7 +1954,7 @@ function renderBatchPreview() {
     if (!showAll && idx >= 6) return;
 
     const canvas = document.createElement('canvas');
-    canvas.style.cssText = 'width:100%;display:block;aspect-ratio:4/3;object-fit:cover;';
+    canvas.style.cssText = 'width:100%;display:block;max-height:400px;object-fit:contain;background:var(--gray-100);';
     canvas.dataset.index = idx;
     tag.appendChild(canvas);
 
@@ -1851,6 +2225,10 @@ function onToggleLocation() {
     if (e.target === $id(id)) $id(id).classList.remove('show');
   });
 });
+
+// 页面加载自动恢复上次保存的设置
+loadDataWatermarkSettings();
+loadCustomWatermarkSettings();
 </script>
 </body>
 </html>
