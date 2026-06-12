@@ -1050,6 +1050,23 @@ function formatTime(raw) {
   return String(raw).trim();
 }
 
+// 安全提取文件扩展名，处理无扩展名、隐藏文件等边界情况
+function getFileExt(filename, depth = 0) {
+  if (depth > 3) return 'jpg'; // 安全上限，防止极端文件名无限递归
+  const parts = filename.split('.');
+  if (parts.length <= 1) return 'jpg'; // 无扩展名，默认 jpg
+  const ext = parts.pop().toLowerCase();
+  // 有效的图片扩展名列表
+  const valid = ['jpg','jpeg','png','webp','gif','bmp','svg','tiff','tif'];
+  return valid.includes(ext) ? ext : (parts.length > 0 ? getFileExt(parts.join('.'), depth + 1) : 'jpg');
+}
+
+function getImageMime(ext) {
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
 // ============================================================
 //  Drag & Drop
 // ============================================================
@@ -1185,9 +1202,6 @@ function matchPhotos() {
     if (missingExcel.length > 0) parts.push(`${missingExcel.length} 个序号缺照片`);
     text += ' — ⚠️ ' + parts.join('，');
     $id('photoStatusText').style.color = 'var(--danger)';
-    // 同时把缺失的序号存下来供展示
-    $id('photoStatus').dataset.extra = extraPhotos;
-    $id('photoStatus').dataset.missing = missingExcel.join('、');
   } else if (photos.length === excelIds.length) {
     text += ' — ✓ 全部匹配';
     $id('photoStatusText').style.color = 'var(--success)';
@@ -1595,7 +1609,7 @@ function hexToRgb(hex) {
 // 行2 = 日期 + 星期 + 地点（同一行，地点过长则独立换行到行3+）
 function drawStructuredWatermark(ctx, canvas, data, cfg) {
   const scale = canvas.width / 800;
-  const baseFs = Math.max(cfg.fontSize, Math.min(cfg.fontSize * scale, cfg.fontSize * 3));
+  const baseFs = Math.max(10, Math.min(cfg.fontSize * scale, cfg.fontSize * 3));
   const headlineFs = Math.max(10, Math.min(cfg.headlineFontSize * scale, cfg.headlineFontSize * 3));
   const subFs = baseFs;
   const sigFs = baseFs * 0.55;
@@ -1742,7 +1756,7 @@ function drawWatermark(canvas, img, cfg, excelRow) {
 
 function drawWatermarkBlock(ctx, canvas, rawLines, cfg) {
   const scale = canvas.width / 800;
-  const actualFs = Math.max(cfg.fontSize, Math.min(cfg.fontSize * scale, cfg.fontSize * 3));
+  const actualFs = Math.max(10, Math.min(cfg.fontSize * scale, cfg.fontSize * 3));
 
   ctx.font = `500 ${actualFs}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
   ctx.textBaseline = 'top';
@@ -1940,15 +1954,15 @@ function downloadSingle() {
   const p = photos[previewPhotoIndex];
   const canvas = $id('previewCanvas');
   const cfg = getWatermarkConfig();
-  const ext = p.name.split('.').pop().toLowerCase();
-  const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+  const ext = getFileExt(p.name);
+  const mime = getImageMime(ext);
   const dataUrl = canvas.toDataURL(mime, cfg.quality);
   p.watermarkedDataUrl = dataUrl;
   p.watermarkedBase64 = dataUrl.split(',')[1];
   p.watermarkedBlobType = mime;
   p.done = true;
   const link = document.createElement('a');
-  link.download = 'watermark_' + p.name.replace(/\.[^.]+$/, '') + (ext === 'png' ? '.png' : '.jpg');
+  link.download = 'watermark_' + p.name.replace(/\.[^.]+$/, '') + '.' + ext;
   link.href = dataUrl;
   link.click();
   updateHeaderButtons();
@@ -2000,7 +2014,6 @@ function renderBatchPreview() {
 
     const canvas = document.createElement('canvas');
     canvas.style.cssText = 'width:100%;display:block;max-height:400px;object-fit:contain;background:var(--gray-100);';
-    canvas.dataset.index = idx;
     tag.appendChild(canvas);
 
     const info = document.createElement('div');
@@ -2115,8 +2128,8 @@ async function processOnePhoto(photo, cfgOverride) {
       const canvas = document.createElement('canvas');
       const cfg = cfgOverride || getWatermarkConfig();
       drawWatermark(canvas, img, cfg, photo.excelRow);
-      const ext = photo.name.split('.').pop().toLowerCase();
-      const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const ext = getFileExt(photo.name);
+      const mime = getImageMime(ext);
       const dataUrl = canvas.toDataURL(mime, cfg.quality);
       const base64 = dataUrl.split(',')[1];
       resolve({ dataUrl, mime, base64, name: 'watermark_' + photo.name });
@@ -2146,7 +2159,7 @@ async function exportBatch(list, zipName) {
   let done = 0;
   for (const p of list) {
     try {
-      const ext = p.name.split('.').pop().toLowerCase();
+      const ext = getFileExt(p.name);
       const outputName = 'watermark_' + p.name.replace(/\.[^.]+$/, '') + '.' + ext;
       zip.file(outputName, p.watermarkedBase64, {base64:true});
     } catch(e) { console.warn('skip', p.name, e); }
@@ -2208,14 +2221,11 @@ $id('customColorPicker').addEventListener('input', e => {
 });
 
 function switchTab(name) {
-  document.querySelectorAll('.tab-btn').forEach((b,i) => {
-    const names = ['preview','data'];
-    b.classList.toggle('active', names[i] === name);
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('onclick').includes(`'${name}'`));
   });
-  document.querySelectorAll('.tab-content').forEach((c,i) => {
-    const names = ['tabPreview','tabData'];
-    c.classList.toggle('active', c.id === 'tab' + name.charAt(0).toUpperCase() + name.slice(1));
-  });
+  $id('tabPreview').classList.toggle('active', name === 'preview');
+  $id('tabData').classList.toggle('active', name === 'data');
 }
 
 function renderExcelTable() {
@@ -2275,8 +2285,14 @@ function onToggleLocation() {
 loadDataWatermarkSettings();
 loadCustomWatermarkSettings();
 
-// 键盘导航：← → 切换预览
+// 键盘导航：← → 切换预览，Esc 关闭
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if ($id('batchPreviewModal').classList.contains('show')) { closeBatchPreviewModal(); return; }
+    if ($id('confirmModal').classList.contains('show')) { closeConfirmModal(); return; }
+    if ($id('helpModal').classList.contains('show')) { closeHelp(); return; }
+    if ($id('previewModal').classList.contains('show')) { closePreviewModal(); return; }
+  }
   if (!$id('previewModal').classList.contains('show')) return;
   if (e.key === 'ArrowLeft') { e.preventDefault(); navigatePreview(-1); }
   if (e.key === 'ArrowRight') { e.preventDefault(); navigatePreview(1); }
