@@ -513,6 +513,95 @@
     display: flex; align-items: center; justify-content: center; gap: 4px;
   }
   .btn-reset:hover { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+
+  /* ===== Template System ===== */
+  .template-bar {
+    display: flex; gap: 8px; margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--gray-100); align-items: center;
+  }
+  .template-select-wrap {
+    flex: 1; position: relative;
+  }
+  .template-select {
+    width: 100%; padding: 7px 28px 7px 10px; border-radius: var(--radius);
+    border: 1px solid var(--gray-200); background: white;
+    font-size: 12px; color: var(--gray-800); cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  .template-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+  .btn-template {
+    padding: 7px 12px; border-radius: var(--radius);
+    border: 1px solid var(--gray-200); background: white;
+    font-size: 12px; color: var(--gray-700); cursor: pointer;
+    transition: all 0.2s; white-space: nowrap;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .btn-template:hover { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+  .btn-template.saved { background: var(--success-light); border-color: var(--success); color: var(--success); }
+  .template-list {
+    margin-top: 6px; max-height: 180px; overflow-y: auto;
+    border: 1px solid var(--gray-100); border-radius: var(--radius);
+    background: white;
+  }
+  .template-list:empty { display: none; }
+  .template-item {
+    display: flex; align-items: center; padding: 6px 10px; gap: 6px;
+    border-bottom: 1px solid var(--gray-50); font-size: 12px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .template-item:last-child { border-bottom: none; }
+  .template-item:hover { background: var(--primary-soft); }
+  .template-item.active { background: var(--primary-soft); font-weight: 600; color: var(--primary); }
+  .template-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gray-800); }
+  .template-action-btn {
+    width: 24px; height: 24px; border: none; background: transparent;
+    border-radius: 4px; cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--gray-400); transition: all 0.15s; flex-shrink: 0;
+  }
+  .template-action-btn:hover { background: var(--gray-100); }
+  .template-action-btn.rename-btn:hover { color: var(--primary); }
+  .template-action-btn.delete-btn:hover { color: var(--danger); background: var(--danger-light); }
+  .no-templates {
+    padding: 12px; text-align: center; color: var(--gray-400);
+    font-size: 12px;
+  }
+  /* Rename dialog */
+  .template-rename-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.3);
+    z-index: 1000; display: flex; align-items: center; justify-content: center;
+    animation: fadeIn 0.15s;
+  }
+  .template-rename-dialog {
+    background: white; border-radius: 12px; padding: 20px 24px;
+    width: 300px; box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    animation: scaleIn 0.15s;
+  }
+  .template-rename-dialog h4 {
+    margin: 0 0 12px; font-size: 14px; color: var(--gray-900);
+  }
+  .template-rename-dialog input {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--gray-200);
+    border-radius: var(--radius); font-size: 13px; box-sizing: border-box;
+  }
+  .template-rename-dialog input:focus { outline: none; border-color: var(--primary); }
+  .template-rename-actions {
+    display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end;
+  }
+  .template-rename-actions button {
+    padding: 6px 16px; border-radius: var(--radius); font-size: 13px; cursor: pointer;
+    border: 1px solid var(--gray-200); background: white; color: var(--gray-700);
+  }
+  .template-rename-actions button.primary {
+    background: var(--primary); color: white; border-color: var(--primary);
+  }
+  .template-rename-actions button.primary:hover { background: var(--primary-hover); }
+  @keyframes scaleIn {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
 </style>
 </head>
 <body>
@@ -700,6 +789,14 @@
           <span class="range-value" id="qualityVal">92</span>
         </div>
       </div>
+      <div class="template-bar">
+        <div class="template-select-wrap">
+          <select class="template-select" id="dataTemplateSelect" onchange="onDataTemplateChange()">
+            <option value="">当前设置</option>
+          </select>
+        </div>
+        <button class="btn-template" onclick="saveAsDataTemplate()">💾 保存为模板</button>
+      </div>
       <div class="save-bar">
         <button class="btn-save" onclick="saveDataWatermarkSettings()" id="btnSaveData">💾 保存设置</button>
         <button class="btn-reset" onclick="clearDataWatermarkSettings()">🔄 恢复默认</button>
@@ -794,6 +891,14 @@
           <div class="pos-btn" data-pos="bottom-center" onclick="setCustomPosition('bottom-center')">下中</div>
           <div class="pos-btn" data-pos="bottom-right" onclick="setCustomPosition('bottom-right')">右下</div>
         </div>
+      </div>
+      <div class="template-bar">
+        <div class="template-select-wrap">
+          <select class="template-select" id="customTemplateSelect" onchange="onCustomTemplateChange()">
+            <option value="">当前设置</option>
+          </select>
+        </div>
+        <button class="btn-template" onclick="saveAsCustomTemplate()">💾 保存为模板</button>
       </div>
       <div class="save-bar">
         <button class="btn-save" onclick="saveCustomWatermarkSettings()" id="btnSaveCustom">💾 保存设置</button>
@@ -1404,6 +1509,8 @@ function getCustomWatermarkConfig() {
 // ============================================================
 const STORAGE_KEY_DATA = 'wm_data_cfg';
 const STORAGE_KEY_CUSTOM = 'wm_custom_cfg';
+const STORAGE_KEY_DATA_TEMPLATES = 'wm_data_templates';
+const STORAGE_KEY_CUSTOM_TEMPLATES = 'wm_custom_templates';
 
 /* ---- 数据水印 保存/加载/清除 ---- */
 function saveDataWatermarkSettings() {
@@ -1552,6 +1659,217 @@ function clearCustomWatermarkSettings() {
   location.reload();
 }
 
+// ============================================================
+//  Template System
+// ============================================================
+function generateTemplateId() {
+  return 'tpl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+/* ---- 数据水印模板 ---- */
+function getDataTemplates() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY_DATA_TEMPLATES)) || []; }
+  catch(e) { return []; }
+}
+function saveDataTemplates(arr) {
+  localStorage.setItem(STORAGE_KEY_DATA_TEMPLATES, JSON.stringify(arr));
+}
+
+function saveAsDataTemplate() {
+  const defaultName = '数据水印 ' + new Date().toLocaleString('zh-CN', { month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit' });
+  const name = prompt('请输入模板名称：', defaultName);
+  if (!name || !name.trim()) return;
+  const cfg = getWatermarkConfig();
+  const tpl = {
+    id: generateTemplateId(),
+    name: name.trim(),
+    config: {
+      showDate: cfg.showDate, showTime: cfg.showTime, showWeekday: cfg.showWeekday,
+      showLocation: cfg.showLocation, showLocationIcon: cfg.showLocationIcon, showId: cfg.showId,
+      fontSize: cfg.fontSize, color: cfg.color, opacity: Math.round(cfg.opacity * 100),
+      bgOpacity: Math.round(cfg.bgOpacity * 100), padding: cfg.padding, borderRadius: cfg.borderRadius,
+      position: cfg.position, maxWidthPct: cfg.maxWidthPct, quality: Math.round(cfg.quality * 100),
+      headlineFontSize: cfg.headlineFontSize,
+    },
+    createdAt: Date.now(),
+  };
+  const templates = getDataTemplates();
+  templates.push(tpl);
+  saveDataTemplates(templates);
+  renderDataTemplateList();
+  $id('dataTemplateSelect').value = tpl.id;
+  showToast('模板「' + tpl.name + '」已保存');
+}
+
+function loadDataTemplate(id) {
+  if (!id) return; // "当前设置"
+  const templates = getDataTemplates();
+  const tpl = templates.find(t => t.id === id);
+  if (!tpl) return;
+  const d = tpl.config;
+  if (typeof d.showDate === 'boolean') $id('toggleDate').checked = d.showDate;
+  if (typeof d.showTime === 'boolean') $id('toggleTime').checked = d.showTime;
+  if (typeof d.showWeekday === 'boolean') $id('toggleWeekday').checked = d.showWeekday;
+  if (typeof d.showLocation === 'boolean') { $id('toggleLocation').checked = d.showLocation; onToggleLocation(); }
+  if (typeof d.showLocationIcon === 'boolean') $id('toggleLocationIcon').checked = d.showLocationIcon;
+  if (typeof d.showId === 'boolean') $id('toggleId').checked = d.showId;
+  if (typeof d.fontSize === 'number') { $id('fontSize').value = d.fontSize; updateRangeVal('fontSize', 'fontSizeVal'); }
+  if (typeof d.color === 'string') {
+    $id('colorPicker').value = d.color;
+    document.querySelectorAll('#colorPresets .color-preset').forEach(p => p.classList.toggle('active', p.dataset.color === d.color));
+  }
+  if (typeof d.opacity === 'number') { $id('opacity').value = d.opacity; updateRangeVal('opacity', 'opacityVal'); }
+  if (typeof d.bgOpacity === 'number') { $id('bgOpacity').value = d.bgOpacity; updateRangeVal('bgOpacity', 'bgOpacityVal'); }
+  if (typeof d.padding === 'number') { $id('padding').value = d.padding; updateRangeVal('padding', 'paddingVal'); }
+  if (typeof d.borderRadius === 'number') { $id('borderRadius').value = d.borderRadius; updateRangeVal('borderRadius', 'borderRadiusVal'); }
+  if (typeof d.position === 'string') {
+    selectedPos = d.position;
+    document.querySelectorAll('#positionGrid .pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === d.position));
+  }
+  if (typeof d.maxWidthPct === 'number') { $id('maxWidth').value = d.maxWidthPct; updateRangeVal('maxWidth', 'maxWidthVal'); }
+  if (typeof d.headlineFontSize === 'number') { $id('headlineFontSize').value = d.headlineFontSize; updateRangeVal('headlineFontSize', 'headlineFontSizeVal'); }
+  if (typeof d.quality === 'number') { $id('quality').value = d.quality; updateRangeVal('quality', 'qualityVal'); }
+  refreshOpenPreview();
+}
+
+function renameDataTemplate(id) {
+  const templates = getDataTemplates();
+  const tpl = templates.find(t => t.id === id);
+  if (!tpl) return;
+  const newName = prompt('重命名模板：', tpl.name);
+  if (!newName || !newName.trim()) return;
+  tpl.name = newName.trim();
+  saveDataTemplates(templates);
+  renderDataTemplateList();
+  $id('dataTemplateSelect').value = id;
+}
+
+function deleteDataTemplate(id) {
+  if (!confirm('确定删除此模板？')) return;
+  let templates = getDataTemplates();
+  templates = templates.filter(t => t.id !== id);
+  saveDataTemplates(templates);
+  renderDataTemplateList();
+  $id('dataTemplateSelect').value = '';
+}
+
+function onDataTemplateChange() {
+  loadDataTemplate($id('dataTemplateSelect').value);
+}
+
+function renderDataTemplateList() {
+  const templates = getDataTemplates();
+  const sel = $id('dataTemplateSelect');
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">当前设置</option>';
+  templates.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name;
+    sel.appendChild(opt);
+  });
+  // 保持选中状态
+  if (templates.some(t => t.id === currentVal)) sel.value = currentVal;
+  else sel.value = '';
+}
+
+/* ---- 自定义水印模板 ---- */
+function getCustomTemplates() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY_CUSTOM_TEMPLATES)) || []; }
+  catch(e) { return []; }
+}
+function saveCustomTemplates(arr) {
+  localStorage.setItem(STORAGE_KEY_CUSTOM_TEMPLATES, JSON.stringify(arr));
+}
+
+function saveAsCustomTemplate() {
+  const defaultName = '自定义水印 ' + new Date().toLocaleString('zh-CN', { month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit' });
+  const name = prompt('请输入模板名称：', defaultName);
+  if (!name || !name.trim()) return;
+  const cfg = getCustomWatermarkConfig();
+  const tpl = {
+    id: generateTemplateId(),
+    name: name.trim(),
+    config: {
+      enabled: cfg.enabled, text: cfg.text, fontSize: cfg.fontSize, color: cfg.color,
+      opacity: Math.round(cfg.opacity * 100), bgOpacity: Math.round(cfg.bgOpacity * 100),
+      padding: cfg.padding, borderRadius: cfg.borderRadius, position: cfg.position, maxWidthPct: cfg.maxWidthPct,
+    },
+    createdAt: Date.now(),
+  };
+  const templates = getCustomTemplates();
+  templates.push(tpl);
+  saveCustomTemplates(templates);
+  renderCustomTemplateList();
+  $id('customTemplateSelect').value = tpl.id;
+  showToast('模板「' + tpl.name + '」已保存');
+}
+
+function loadCustomTemplate(id) {
+  if (!id) return;
+  const templates = getCustomTemplates();
+  const tpl = templates.find(t => t.id === id);
+  if (!tpl) return;
+  const d = tpl.config;
+  if (typeof d.enabled === 'boolean') $id('toggleCustom').checked = d.enabled;
+  if (typeof d.text === 'string') $id('customText').value = d.text;
+  if (typeof d.fontSize === 'number') { $id('customFontSize').value = d.fontSize; updateRangeVal('customFontSize', 'customFontSizeVal'); }
+  if (typeof d.color === 'string') {
+    $id('customColorPicker').value = d.color;
+    document.querySelectorAll('#customColorPresets .color-preset').forEach(p => p.classList.toggle('active', p.dataset.color === d.color));
+  }
+  if (typeof d.opacity === 'number') { $id('customOpacity').value = d.opacity; updateRangeVal('customOpacity', 'customOpacityVal'); }
+  if (typeof d.bgOpacity === 'number') { $id('customBgOpacity').value = d.bgOpacity; updateRangeVal('customBgOpacity', 'customBgOpacityVal'); }
+  if (typeof d.padding === 'number') { $id('customPadding').value = d.padding; updateRangeVal('customPadding', 'customPaddingVal'); }
+  if (typeof d.borderRadius === 'number') { $id('customBorderRadius').value = d.borderRadius; updateRangeVal('customBorderRadius', 'customBorderRadiusVal'); }
+  if (typeof d.position === 'string') {
+    customSelectedPos = d.position;
+    document.querySelectorAll('#customPositionGrid .pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === d.position));
+  }
+  if (typeof d.maxWidthPct === 'number') { $id('customMaxWidth').value = d.maxWidthPct; updateRangeVal('customMaxWidth', 'customMaxWidthVal'); }
+  refreshOpenPreview();
+}
+
+function renameCustomTemplate(id) {
+  const templates = getCustomTemplates();
+  const tpl = templates.find(t => t.id === id);
+  if (!tpl) return;
+  const newName = prompt('重命名模板：', tpl.name);
+  if (!newName || !newName.trim()) return;
+  tpl.name = newName.trim();
+  saveCustomTemplates(templates);
+  renderCustomTemplateList();
+  $id('customTemplateSelect').value = id;
+}
+
+function deleteCustomTemplate(id) {
+  if (!confirm('确定删除此模板？')) return;
+  let templates = getCustomTemplates();
+  templates = templates.filter(t => t.id !== id);
+  saveCustomTemplates(templates);
+  renderCustomTemplateList();
+  $id('customTemplateSelect').value = '';
+}
+
+function onCustomTemplateChange() {
+  loadCustomTemplate($id('customTemplateSelect').value);
+}
+
+function renderCustomTemplateList() {
+  const templates = getCustomTemplates();
+  const sel = $id('customTemplateSelect');
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">当前设置</option>';
+  templates.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name;
+    sel.appendChild(opt);
+  });
+  if (templates.some(t => t.id === currentVal)) sel.value = currentVal;
+  else sel.value = '';
+}
+
 function buildWatermarkLines(cfg, excelRow) {
   // 新布局：
   //   headline  = 时间（行1，超大字）
@@ -1614,7 +1932,6 @@ function drawStructuredWatermark(ctx, canvas, data, cfg) {
   const subFs = baseFs;
   const sigFs = baseFs * 0.55;
   const pad = Math.max(cfg.padding, cfg.padding * scale);
-  const gapV = subFs * 0.25;
   const lineH = subFs * 1.35;
   const SEP = '  '; // 日期/星期/地点之间的分隔空格
 
@@ -1622,9 +1939,12 @@ function drawStructuredWatermark(ctx, canvas, data, cfg) {
   const subFont = `400 ${subFs}px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif`;
   ctx.font = subFont;
 
+  // ---- 内圈约束（80%）：数据水印仅在内圈区域内调整 ----
+  const innerAreaW = canvas.width * 0.80;
+
   // ---- 组装第二行：判断地点是否能和日期+星期放在一行 ----
-  // maxBoxW 约束：用 maxWidthPct 限制整体宽度
-  const maxBoxW = canvas.width * (cfg.maxWidthPct / 100) - pad * 2;
+  // maxBoxW 约束：内圈80% + maxWidthPct 双重限制
+  const maxBoxW = Math.min(innerAreaW, canvas.width * (cfg.maxWidthPct / 100)) - pad * 2;
 
   // datePart = 日期 + 星期
   const datePart = data.dateLine || '';
@@ -1670,21 +1990,24 @@ function drawStructuredWatermark(ctx, canvas, data, cfg) {
   // ---- 计算块尺寸 ----
   const blockW = maxLineW + pad * 2;
   let blockH = pad * 2;
-  if (data.headline) blockH += headlineFs + gapV;
+  if (data.headline) blockH += headlineFs + lineH;
   if (allSubRows.length) blockH += lineH * allSubRows.length;
 
-  // ---- 定位 ----
+  // ---- 定位（内圈80%区域内） ----
+  const innerAreaX = canvas.width * 0.10;
+  const innerAreaY = canvas.height * 0.10;
+  const innerAreaH = canvas.height * 0.80;
   const margin = Math.max(baseFs * 0.8, 8);
   const pos = cfg.position;
   let x, y;
 
-  if (pos.endsWith('right'))        x = canvas.width - blockW - margin;
-  else if (pos.endsWith('center'))  x = (canvas.width - blockW) / 2;
-  else                               x = margin;
+  if (pos.endsWith('right'))        x = innerAreaX + innerAreaW - blockW - margin;
+  else if (pos.endsWith('center'))  x = innerAreaX + (innerAreaW - blockW) / 2;
+  else                               x = innerAreaX + margin;
 
-  if (pos.startsWith('bottom'))     y = canvas.height - blockH - margin;
-  else if (pos.startsWith('mid'))   y = (canvas.height - blockH) / 2;
-  else                               y = margin;
+  if (pos.startsWith('bottom'))     y = innerAreaY + innerAreaH - blockH - margin;
+  else if (pos.startsWith('mid'))   y = innerAreaY + (innerAreaH - blockH) / 2;
+  else                               y = innerAreaY + margin;
 
   // ---- 背景 ----
   if (cfg.bgOpacity > 0) {
@@ -1711,7 +2034,7 @@ function drawStructuredWatermark(ctx, canvas, data, cfg) {
     ctx.fillStyle = `rgba(${r},${g},${b},${cfg.opacity})`;
     const hx = pos.endsWith('center') ? x + (blockW - headlineW) / 2 : x + pad;
     ctx.fillText(data.headline, hx, cy);
-    cy += headlineFs + gapV;
+    cy += headlineFs + lineH;
   }
 
   // ② 第二行及以后（日期+星期+地点 / 日期+星期 / 地点换行 / 编号）
@@ -1764,24 +2087,30 @@ function drawWatermarkBlock(ctx, canvas, rawLines, cfg) {
   const lineH = actualFs * 1.5;
   const actualPad = Math.max(cfg.padding, cfg.padding * scale);
 
-  const maxBoxW = canvas.width * (cfg.maxWidthPct / 100) - actualPad * 2;
+  // ---- 外圈约束（96%）：自定义水印仅在外圈区域内调整 ----
+  const outerAreaW = canvas.width * 0.96;
+  const maxBoxW = Math.min(outerAreaW, canvas.width * (cfg.maxWidthPct / 100)) - actualPad * 2;
   const lines = reflowLines(ctx, rawLines, maxBoxW);
   if (!lines.length) return;
 
   const blockW = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0) + actualPad * 2;
   const blockH = lines.length * lineH + actualPad * 2 - (lineH - actualFs) * 0.5;
 
+  // 外圈区域（96%），水印仅在此区域内调整
+  const outerAreaX = canvas.width * 0.02;
+  const outerAreaY = canvas.height * 0.02;
+  const outerAreaH = canvas.height * 0.96;
   const margin = Math.max(actualFs * 0.8, 8);
   const pos = cfg.position;
   let x, y;
 
-  if (pos.endsWith('right'))        x = canvas.width - blockW - margin;
-  else if (pos.endsWith('center'))  x = (canvas.width - blockW) / 2;
-  else                               x = margin;
+  if (pos.endsWith('right'))        x = outerAreaX + outerAreaW - blockW - margin;
+  else if (pos.endsWith('center'))  x = outerAreaX + (outerAreaW - blockW) / 2;
+  else                               x = outerAreaX + margin;
 
-  if (pos.startsWith('bottom'))     y = canvas.height - blockH - margin;
-  else if (pos.startsWith('mid'))   y = (canvas.height - blockH) / 2;
-  else                               y = margin;
+  if (pos.startsWith('bottom'))     y = outerAreaY + outerAreaH - blockH - margin;
+  else if (pos.startsWith('mid'))   y = outerAreaY + (outerAreaH - blockH) / 2;
+  else                               y = outerAreaY + margin;
 
   // Background
   if (cfg.bgOpacity > 0) {
@@ -2284,6 +2613,10 @@ function onToggleLocation() {
 // 页面加载自动恢复上次保存的设置
 loadDataWatermarkSettings();
 loadCustomWatermarkSettings();
+
+// 初始化模板选择器
+renderDataTemplateList();
+renderCustomTemplateList();
 
 // 键盘导航：← → 切换预览，Esc 关闭
 document.addEventListener('keydown', e => {
