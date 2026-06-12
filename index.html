@@ -157,8 +157,8 @@
   }
   .section-content {
     padding: 0 16px 16px;
-    max-height: 1000px;
-    overflow: hidden;
+    max-height: 50vh;
+    overflow-y: auto;
     transition: max-height 0.35s ease, padding 0.3s ease, opacity 0.2s ease;
     opacity: 1;
   }
@@ -166,6 +166,7 @@
     max-height: 0;
     padding-top: 0;
     padding-bottom: 0;
+    overflow-y: hidden;
     opacity: 0;
   }
 
