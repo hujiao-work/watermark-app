@@ -75,9 +75,14 @@
   .header-actions { display: flex; gap: 8px; }
 
   /* ===== Layout ===== */
-  .app { display: flex; height: calc(100vh - 60px); }
-  .sidebar {
-    width: 340px; min-width: 340px;
+  .app { display: flex; flex-direction: column; height: calc(100vh - 60px); }
+  .workspace {
+    flex: 1; display: flex;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .panel-area {
+    width: 320px; min-width: 320px;
     background: white;
     border-right: 1px solid var(--gray-100);
     display: flex; flex-direction: column;
@@ -109,22 +114,23 @@
     grid-template-columns: 1fr;
   }
 
-  /* ===== Tab Navigation ===== */
+  /* ===== Tab Navigation (top bar) ===== */
   .tab-nav {
     display: flex;
     gap: 2px;
-    padding: 8px 8px 0;
+    padding: 6px 12px 0;
     background: white;
     border-bottom: 2px solid var(--gray-100);
     flex-shrink: 0;
+    justify-content: flex-start;
   }
   .sidebar-tab-btn {
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 9px 2px 8px;
+    flex: 0 0 auto;
+    min-width: 80px;
+    padding: 10px 16px 9px;
     border: none;
     background: none;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--gray-500);
     cursor: pointer;
@@ -132,7 +138,7 @@
     border-bottom: 2px solid transparent;
     margin-bottom: -2px;
     transition: color 0.15s, border-color 0.15s;
-    display: flex; align-items: center; justify-content: center; gap: 4px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
   }
   .sidebar-tab-btn:hover { color: var(--gray-700); background: var(--gray-50); border-radius: 8px 8px 0 0; }
   .sidebar-tab-btn.active {
@@ -682,15 +688,17 @@
 </header>
 
 <div class="app">
-  <!-- Sidebar: Tab Navigation -->
-  <aside class="sidebar">
-    <nav class="tab-nav">
-      <button class="sidebar-tab-btn active" onclick="switchSidebarTab('panel1')"><span class="tab-num">1</span>Excel</button>
-      <button class="sidebar-tab-btn" onclick="switchSidebarTab('panel2')"><span class="tab-num">2</span>照片</button>
-      <button class="sidebar-tab-btn" onclick="switchSidebarTab('panel3')"><span class="tab-num">3</span>数据</button>
-      <button class="sidebar-tab-btn" onclick="switchSidebarTab('panel4')"><span class="tab-num">4</span>样式</button>
-      <button class="sidebar-tab-btn" onclick="switchSidebarTab('panel5')"><span class="tab-num">5</span>自定义</button>
-    </nav>
+  <!-- Top Tab Navigation -->
+  <nav class="tab-nav">
+    <button class="sidebar-tab-btn active" onclick="switchSidebarTab('panel1')"><span class="tab-num">1</span>Excel</button>
+    <button class="sidebar-tab-btn" onclick="switchSidebarTab('panel2')"><span class="tab-num">2</span>照片</button>
+    <button class="sidebar-tab-btn" onclick="switchSidebarTab('panel3')"><span class="tab-num">3</span>数据</button>
+    <button class="sidebar-tab-btn" onclick="switchSidebarTab('panel4')"><span class="tab-num">4</span>样式</button>
+    <button class="sidebar-tab-btn" onclick="switchSidebarTab('panel5')"><span class="tab-num">5</span>自定义</button>
+  </nav>
+  <div class="workspace">
+    <!-- Left: Panel Content -->
+    <aside class="panel-area">
     <div class="tab-panels">
 
     <!-- Panel 1: Excel Import -->
@@ -964,10 +972,10 @@
     </div>
 
     </div><!-- .tab-panels -->
-  </aside>
+    </aside>
 
-  <!-- Main Content -->
-  <main class="main">
+    <!-- Main Content -->
+    <main class="main">
     <!-- Top Bar -->
     <div class="main-top">
       <div style="flex:1; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
@@ -1005,6 +1013,7 @@
       </div>
     </div>
   </main>
+  </div><!-- .workspace -->
 </div>
 
 <!-- Preview Modal -->
